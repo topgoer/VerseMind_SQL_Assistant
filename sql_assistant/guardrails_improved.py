@@ -4,7 +4,7 @@ SQL guardrails for VerseMind SQL Assistant.
 This module provides validation and security checks for SQL queries.
 """
 import re
-from typing import List, Tuple
+from typing import Tuple
 
 # Forbidden SQL keywords that could be used for malicious purposes
 FORBIDDEN_KEYWORDS = [

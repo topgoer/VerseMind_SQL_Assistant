@@ -4,10 +4,9 @@ Integration test for chat vs MCP parity.
 Tests that /chat and /mcp endpoints return identical answers for the same query.
 """
 import pytest
-import asyncio
 import uuid
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import jwt
 
 from sql_assistant.main import app

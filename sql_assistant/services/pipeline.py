@@ -7,25 +7,20 @@ This module provides the core functionality for:
 3. Formatting results into human-readable answers
 """
 import os
-import uuid
-import csv
 import json
 import re
-import asyncio
 import httpx
 from typing import Dict, List, Optional, Tuple, Any, Union
-from datetime import datetime
 
-import openai
 import anthropic
 from mistralai.client import MistralClient
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncConnection
+from sqlalchemy.ext.asyncio import create_async_engine
 from fastapi import HTTPException
 from openai import AsyncOpenAI
 
-from sql_assistant.schemas.generate_sql import GenerateSQLParameters, GenerateSQLResponse
-from sql_assistant.guardrails import validate_sql, validate_sql_with_extraction, extract_sql_query
+from sql_assistant.schemas.generate_sql import GenerateSQLParameters
+from sql_assistant.guardrails import validate_sql_with_extraction, extract_sql_query
 from sql_assistant.services.domain_glossary import DOMAIN_GLOSSARY
 from sql_assistant.services.sql_correction import (
     check_sql_content, is_valid_sql, correct_active_conditions,
@@ -36,7 +31,7 @@ from sql_assistant.services.llm_provider import (
     check_llm_api_keys, try_llm_provider, handle_llm_failures
 )
 from sql_assistant.services.db_operations import (
-    execute_sql_query, handle_large_result, handle_column_error, extract_bad_column
+    handle_column_error, extract_bad_column
 )
 
 # Database connection
@@ -53,14 +48,6 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 # Function moved to llm_provider.py
-
-# SQL pattern constants to avoid duplication
-# This is kept here for backward compatibility - also defined in sql_correction.py
-ACTIVE_VEHICLES_SQL_PATTERN = (
-    "vehicles.vehicle_id IN (SELECT DISTINCT trips.vehicle_id FROM trips "
-    "WHERE EXTRACT(MONTH FROM trips.start_ts) = EXTRACT(MONTH FROM CURRENT_DATE) "
-    "AND EXTRACT(YEAR FROM trips.start_ts) = EXTRACT(YEAR FROM CURRENT_DATE))"
-)
 
 async def nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
     """
@@ -312,7 +299,6 @@ def _extract_sql_from_openai_response(function_args: dict) -> str:
 
 async def _openai_nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
     """Use OpenAI to convert natural language to SQL."""
-    import httpx
     
     client = AsyncOpenAI(
         api_key=os.environ.get("OPENAI_API_KEY"),
@@ -772,7 +758,6 @@ async def answer_format(query: str, sql_result: Dict[str, Any], sql: str) -> str
 async def _openai_answer_format(context_str: str) -> str:
     """Use OpenAI to format results into a human-readable answer."""
     # Configure client at runtime
-    import httpx
     
     # Configure client with a longer timeout (60 seconds)
     # Use only supported parameters for the AsyncOpenAI client

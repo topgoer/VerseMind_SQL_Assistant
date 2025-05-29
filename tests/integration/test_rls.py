@@ -4,9 +4,8 @@ Integration test for RLS (Row-Level Security).
 Tests that cross-fleet isolation is properly enforced.
 """
 import pytest
-import asyncio
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import jwt
 
 from sql_assistant.main import app

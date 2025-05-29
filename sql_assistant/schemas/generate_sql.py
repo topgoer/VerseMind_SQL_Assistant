@@ -3,7 +3,7 @@ Schemas for SQL generation function call.
 
 This module defines the Pydantic models for the OpenAI function call to generate SQL.
 """
-from typing import Dict, List, Optional
+from typing import Optional
 from pydantic import BaseModel, Field
 
 class GenerateSQLParameters(BaseModel):

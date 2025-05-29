@@ -4,11 +4,10 @@ Integration test for large result path.
 Tests that queries returning >100 rows provide a download_url and create the file.
 """
 import pytest
-import asyncio
 import os
 import uuid
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import jwt
 
 from sql_assistant.main import app

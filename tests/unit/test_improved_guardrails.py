@@ -4,9 +4,7 @@ SQL Guardrails tests.
 This module tests the validation functionality in guardrails.py.
 """
 import sys
-import os
 import unittest
-import re
 from pathlib import Path
 
 # Add the parent directory to the module search path

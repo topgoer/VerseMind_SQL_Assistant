@@ -6,7 +6,7 @@ This module handles SQL validation and correction.
 import re
 from typing import Tuple
 
-from sql_assistant.guardrails import validate_sql, validate_sql_with_extraction, extract_sql_query
+from sql_assistant.guardrails import validate_sql
 
 # SQL pattern constants to avoid duplication
 ACTIVE_VEHICLES_SQL_PATTERN = (

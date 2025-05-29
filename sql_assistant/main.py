@@ -4,11 +4,10 @@ Main application module for SQL Assistant.
 This module defines the FastAPI application, routes, and middleware.
 """
 import os
-import uuid
-from typing import Dict, Optional
+from typing import Dict
 from pathlib import Path
 
-from fastapi import FastAPI, Depends, HTTPException, Request, Body, Response
+from fastapi import FastAPI, Depends, HTTPException, Request, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse

@@ -4,7 +4,7 @@ LLM provider utilities for SQL Assistant.
 This module handles interactions with different LLM providers.
 """
 import os
-from typing import Dict, Tuple, Any, Optional
+from typing import Dict, Tuple, Optional
 
 from fastapi import HTTPException
 

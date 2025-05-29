@@ -3,7 +3,6 @@ Unit tests for SQL guardrails.
 
 Tests validation of SQL queries against security guardrails.
 """
-import pytest
 from sql_assistant.guardrails import validate_sql
 
 def test_valid_sql():

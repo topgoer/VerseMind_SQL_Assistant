@@ -5,7 +5,7 @@ This module defines the Pydantic models for the MCP envelope and steps.
 """
 from typing import Dict, List, Literal, Optional, Union, Any
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 class Step(BaseModel):
     """

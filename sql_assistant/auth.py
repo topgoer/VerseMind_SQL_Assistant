@@ -4,7 +4,6 @@ Authentication module for VerseMind SQL Assistant.
 Handles JWT validation and fleet_id extraction.
 """
 import os
-from typing import Optional
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
