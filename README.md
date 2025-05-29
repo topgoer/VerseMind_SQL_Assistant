@@ -316,18 +316,6 @@ sql_assistant/
 - JWT authentication ensures users can only access their own fleet data
 - Row-Level Security (RLS) enforces data isolation at the database level
 
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
 ## JWT Token Generation for Testing
 
 To test authenticated endpoints, you need a valid JWT token and a matching public key file.
@@ -382,3 +370,15 @@ It contains definitions and explanations for terms such as SOH (State of Health)
 - This ensures that the LLM always has access to domain definitions and relationships when answering user queries.
 
 Feel free to update or expand the glossary as your data or use cases evolve.
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
