@@ -3,6 +3,11 @@ Unit tests for SQL guardrails.
 
 Tests validation of SQL queries against security guardrails.
 """
+
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+
 from sql_assistant.guardrails import validate_sql
 
 def test_valid_sql():
@@ -73,20 +78,20 @@ def test_both_fleet_id_and_limit():
     """Test that SQL must contain both fleet_id filter and LIMIT."""
     # Both present (valid)
     sql1 = "SELECT * FROM vehicles WHERE fleet_id = :fleet_id LIMIT 100"
-    is_valid1, error1 = validate_sql(sql1)
+    is_valid1, _ = validate_sql(sql1)
     assert is_valid1
     
     # Missing fleet_id
     sql2 = "SELECT * FROM vehicles LIMIT 100"
-    is_valid2, error2 = validate_sql(sql2)
+    is_valid2, _ = validate_sql(sql2)
     assert not is_valid2
     
     # Missing LIMIT
     sql3 = "SELECT * FROM vehicles WHERE fleet_id = :fleet_id"
-    is_valid3, error3 = validate_sql(sql3)
+    is_valid3, _ = validate_sql(sql3)
     assert not is_valid3
     
     # Both missing
     sql4 = "SELECT * FROM vehicles"
-    is_valid4, error4 = validate_sql(sql4)
+    is_valid4, _ = validate_sql(sql4)
     assert not is_valid4
