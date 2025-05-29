@@ -61,5 +61,4 @@ static/downloads/
 logs/
 *.log
 
-public.pem
 private.pem

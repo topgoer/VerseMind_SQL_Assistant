@@ -20,3 +20,4 @@ cryptography>=45.0.0
 cffi>=1.14
 pycparser>=2.22
 python-dotenv>=1.0.0
+psycopg2-binary
