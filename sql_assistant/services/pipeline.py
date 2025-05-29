@@ -12,6 +12,7 @@ import csv
 import json
 import re
 import asyncio
+import httpx
 from typing import Dict, List, Optional, Tuple, Any, Union
 from datetime import datetime
 
@@ -26,6 +27,17 @@ from openai import AsyncOpenAI
 from sql_assistant.schemas.generate_sql import GenerateSQLParameters, GenerateSQLResponse
 from sql_assistant.guardrails import validate_sql, validate_sql_with_extraction, extract_sql_query
 from sql_assistant.services.domain_glossary import DOMAIN_GLOSSARY
+from sql_assistant.services.sql_correction import (
+    check_sql_content, is_valid_sql, correct_active_conditions,
+    correct_last_active_date, ensure_trips_join, attempt_aggressive_extraction,
+    ACTIVE_VEHICLES_SQL_PATTERN
+)
+from sql_assistant.services.llm_provider import (
+    check_llm_api_keys, try_llm_provider, handle_llm_failures
+)
+from sql_assistant.services.db_operations import (
+    execute_sql_query, handle_large_result, handle_column_error, extract_bad_column
+)
 
 # Database connection
 DB_USER = os.environ.get("DB_USER", "postgres")
@@ -40,34 +52,15 @@ engine = create_async_engine(DATABASE_URL)
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 
-def _check_llm_api_keys():
-    """Check if at least one LLM API key is available."""
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-    ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-    MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY")
-    
-    if not any([OPENAI_API_KEY, ANTHROPIC_API_KEY, MISTRAL_API_KEY]):
-        raise RuntimeError(
-            "No LLM API key found. Please set at least one of: "
-            "OPENAI_API_KEY, ANTHROPIC_API_KEY, MISTRAL_API_KEY"
-        )
-    
-    return OPENAI_API_KEY, ANTHROPIC_API_KEY, MISTRAL_API_KEY
+# Function moved to llm_provider.py
 
-# Constants for error checking
-EMPTY_SQL_ERROR = "empty sql"
-BLANK_SQL_ERROR = "blank sql"
-
-async def _try_llm_provider(provider_name, provider_fn, query, fleet_id):
-    """Helper function to try an LLM provider and capture errors."""
-    try:
-        print(f"Attempting SQL generation with {provider_name}")
-        return await provider_fn(query, fleet_id), None
-    except Exception as e:
-        error_msg = f"{provider_name} error: {str(e)}"
-        print(error_msg)
-        is_empty_error = (EMPTY_SQL_ERROR in str(e).lower() or BLANK_SQL_ERROR in str(e).lower())
-        return None, (error_msg, is_empty_error)
+# SQL pattern constants to avoid duplication
+# This is kept here for backward compatibility - also defined in sql_correction.py
+ACTIVE_VEHICLES_SQL_PATTERN = (
+    "vehicles.vehicle_id IN (SELECT DISTINCT trips.vehicle_id FROM trips "
+    "WHERE EXTRACT(MONTH FROM trips.start_ts) = EXTRACT(MONTH FROM CURRENT_DATE) "
+    "AND EXTRACT(YEAR FROM trips.start_ts) = EXTRACT(YEAR FROM CURRENT_DATE))"
+)
 
 async def nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
     """
@@ -87,44 +80,34 @@ async def nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
     
     try:
         # Check for API keys at runtime
-        OPENAI_API_KEY, ANTHROPIC_API_KEY, MISTRAL_API_KEY = _check_llm_api_keys()
+        OPENAI_API_KEY, ANTHROPIC_API_KEY, MISTRAL_API_KEY = check_llm_api_keys()
         
         # Try each available LLM in order, collecting errors for debugging
         errors = []
         empty_sql_errors = 0
         
-        # Try OpenAI first if available
-        if OPENAI_API_KEY:
-            result, error_info = await _try_llm_provider("OpenAI", _openai_nl_to_sql, query, fleet_id)
+        # Try providers in order of preference
+        providers = [
+            (OPENAI_API_KEY, "OpenAI", _openai_nl_to_sql),
+            (ANTHROPIC_API_KEY, "Anthropic", _anthropic_nl_to_sql),
+            (MISTRAL_API_KEY, "Mistral", _mistral_nl_to_sql)
+        ]
+        
+        # Try each available provider
+        for api_key, provider_name, provider_fn in providers:
+            if not api_key:
+                continue
+                
+            result, error_info = await try_llm_provider(provider_name, provider_fn, query, fleet_id)
             if result:
                 return result
             elif error_info:
                 errors.append(error_info[0])
                 if error_info[1]:  # is empty error
                     empty_sql_errors += 1
-                
-        # Fall back to Anthropic if available
-        if ANTHROPIC_API_KEY:
-            result, error_info = await _try_llm_provider("Anthropic", _anthropic_nl_to_sql, query, fleet_id)
-            if result:
-                return result
-            elif error_info:
-                errors.append(error_info[0])
-                if error_info[1]:  # is empty error
-                    empty_sql_errors += 1
-                
-        # Fall back to Mistral if available
-        if MISTRAL_API_KEY:
-            result, error_info = await _try_llm_provider("Mistral", _mistral_nl_to_sql, query, fleet_id)
-            if result:
-                return result
-            elif error_info:
-                errors.append(error_info[0])
-                if error_info[1]:  # is empty error
-                    empty_sql_errors += 1
-                
+        
         # If we get here, all LLMs failed
-        return _handle_llm_failures(errors, empty_sql_errors)
+        return handle_llm_failures(errors, empty_sql_errors, _validate_and_extract_sql)
                 
     except HTTPException:
         # Re-raise HTTP exceptions as is
@@ -132,44 +115,6 @@ async def nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
     except Exception as e:
         print("Unexpected error in nl_to_sql: {}".format(str(e)))
         raise HTTPException(status_code=500, detail="Error generating SQL: {}".format(str(e)))
-
-def _handle_llm_failures(errors, empty_sql_errors):
-    """Handle the case where all LLM providers failed."""
-    if not errors:
-        raise HTTPException(status_code=500, detail="No LLM API key configured")
-        
-    error_summary = '; '.join(errors)
-    
-    # Provide more specific error message if all LLMs returned empty SQL
-    if empty_sql_errors == len(errors) and empty_sql_errors > 0:
-        print("All LLMs failed with empty SQL responses")
-        # Try to generate a default SQL response
-        try:
-            default_sql = "SELECT * FROM vehicles WHERE fleet_id = :fleet_id LIMIT 100"
-            extracted_sql = _validate_and_extract_sql(default_sql)
-            print("Returning default SQL as fallback: {}".format(default_sql))
-            return {"sql": extracted_sql, "is_fallback": True}
-        except Exception as fallback_error:
-            print("Even default SQL fallback failed: {}".format(str(fallback_error)))
-            raise HTTPException(
-                status_code=500,
-                detail="Could not generate SQL from your query. All LLM models returned empty responses. Please try reformulating your question."
-            )
-    else:
-        raise HTTPException(
-            status_code=500,
-            detail="All LLMs failed to generate SQL. Errors: {}".format(error_summary)
-        )
-
-def _check_sql_content(sql_text, error_message):
-    """Helper function to check if SQL content is valid."""
-    if not sql_text:
-        print(error_message)
-        raise ValueError(error_message)
-
-def _is_valid_sql(sql_text):
-    """Check if text contains valid SQL elements."""
-    return "SELECT" in sql_text.upper()
 
 def _validate_and_extract_sql(sql: str) -> str:
     """
@@ -185,8 +130,8 @@ def _validate_and_extract_sql(sql: str) -> str:
         ValueError: If the SQL is invalid or empty
     """
     # Check for empty input first
-    _check_sql_content(sql, "Null SQL response from LLM")
-    _check_sql_content(sql.strip(), "Blank SQL response from LLM")
+    check_sql_content(sql, "Null SQL response from LLM")
+    check_sql_content(sql.strip(), "Blank SQL response from LLM")
     
     print("Raw LLM output received for SQL extraction: {}{}".format(
         sql[:200], '...' if len(sql) > 200 else ''))
@@ -196,90 +141,194 @@ def _validate_and_extract_sql(sql: str) -> str:
     print("Extracted SQL: {}".format(extracted_sql))
     
     # Check if extraction resulted in something that looks like SQL
-    if not extracted_sql or not _is_valid_sql(extracted_sql):
+    if not extracted_sql or not is_valid_sql(extracted_sql):
         print("SQL extraction failed to produce valid SQL")
         raise ValueError("Failed to extract valid SQL from LLM response")
     
-    # Then validate it
-    is_valid, error_message, validated_sql = validate_sql_with_extraction(sql)
+    # SCHEMA CORRECTION: Before validation, fix common issues with the schema
+    print("Starting schema correction...")
+    original_sql = extracted_sql
+    
+    # 0. First, correct invalid column references
+    extracted_sql = _correct_invalid_columns(extracted_sql)
+    
+    # 1. Fix active = TRUE conditions
+    extracted_sql = correct_active_conditions(extracted_sql)
+    
+    # 2. Fix last_active_date references
+    extracted_sql = correct_last_active_date(extracted_sql)
+    
+    # 3. Ensure trips table is included in FROM clause if needed
+    extracted_sql = ensure_trips_join(extracted_sql)
+    
+    # 4. Check if any modifications were made and log them
+    if extracted_sql != original_sql:
+        print("✅ Schema corrections applied to the SQL query")
+        print(f"BEFORE: {original_sql}")
+        print(f"AFTER:  {extracted_sql}")
+    else:
+        print("✓ No schema corrections needed")
+    
+    # 5. Now validate SQL syntax (not schema correctness)
+    print("Validating SQL: {}".format(extracted_sql[:50] + "..."))
+    is_valid, error_message, _ = validate_sql_with_extraction(extracted_sql)
     
     if not is_valid:
-        print("SQL validation failed: {}".format(error_message))
-        # Make one more attempt to extract SQL from quoted or formatted text
-        contains_code_block = '```' in sql
-        contains_select = "SELECT" in sql.upper()
+        print(f"⚠️ SQL validation failed: {error_message}")
         
-        if contains_code_block or contains_select:
-            print("Attempting more aggressive SQL extraction...")
-            # Look for SELECT statement with more flexible pattern
-            select_pattern = r"SELECT\s+.+?WHERE.+?fleet_id\s*=\s*:fleet_id.+?LIMIT\s+\d+"
-            select_match = re.search(select_pattern, sql, re.IGNORECASE | re.DOTALL)
-            if select_match:
-                extracted_try2 = select_match.group(0)
-                is_valid2, _ = validate_sql(extracted_try2)
-                if is_valid2:
-                    print("Second extraction attempt successful: {}".format(extracted_try2))
-                    return extracted_try2
-        
-        raise ValueError("Generated SQL failed validation: {}".format(error_message))
+        # Make one more attempt with aggressive extraction
+        success, extracted_try2 = attempt_aggressive_extraction(sql)
+        if success:
+            return extracted_try2
+            
+        raise ValueError(f"Generated SQL failed validation: {error_message}")
+    else:
+        print("✅ SQL validation successful")
     
-    # Final check for empty or invalid SQL
-    if not validated_sql or not _is_valid_sql(validated_sql):
+    # 6. Final check for empty or invalid SQL
+    if not extracted_sql or not is_valid_sql(extracted_sql):
         raise ValueError("Validation returned empty or invalid SQL")
     
-    return validated_sql
+    # 7. Always return our corrected version, not what the validator returned
+    # This ensures our schema corrections are preserved
+    print("Final SQL to be returned: " + extracted_sql[:100] + "...")
+    return extracted_sql
+
+# Dictionary containing allowed column names by table
+# This helps catch references to non-existent columns
+TABLE_COLUMNS = {
+    "vehicles": ["vehicle_id", "vin", "fleet_id", "model", "make", "variant", "registration_no", "purchase_date"],
+    "trips": ["trip_id", "vehicle_id", "start_ts", "end_ts", "distance_km", "energy_kwh", "idle_minutes", "avg_temp_c"],
+    "charging_sessions": ["session_id", "vehicle_id", "start_ts", "end_ts", "start_soc", "end_soc", "energy_kwh", "location"],
+    "drivers": ["driver_id", "fleet_id", "name", "license_no", "hire_date"],
+    "fleets": ["fleet_id", "name", "country", "time_zone"],
+    "alerts": ["alert_id", "vehicle_id", "alert_type", "severity", "alert_ts", "value", "threshold", "resolved_bool", "resolved_ts"],
+    "battery_cycles": ["cycle_id", "vehicle_id", "ts", "dod_pct", "soh_pct"],
+    "raw_telemetry": ["ts", "vehicle_id", "soc_pct", "pack_voltage_v", "pack_current_a", "batt_temp_c", "latitude", "longitude", "speed_kph", "odo_km"],
+    "processed_metrics": ["ts", "vehicle_id", "avg_speed_kph_15m", "distance_km_15m", "energy_kwh_15m", "battery_health_pct", "soc_band"],
+    "maintenance_logs": ["maint_id", "vehicle_id", "maint_type", "start_ts", "end_ts", "cost_sgd", "notes"],
+    "geofence_events": ["event_id", "vehicle_id", "geofence_name", "enter_ts", "exit_ts"],
+    "fleet_daily_summary": ["fleet_id", "date", "total_distance_km", "total_energy_kwh", "active_vehicles", "avg_soc_pct"],
+    "driver_trip_map": ["trip_id", "driver_id", "primary_bool"]
+}
+
+# Dictionary mapping incorrect column references to correct ones
+COLUMN_CORRECTIONS = {
+    "trips.energy": "trips.energy_kwh",     # Common simplification of energy_kwh
+    "energy_consumed": "energy_kwh",        # Common incorrect reference
+    "energy_usage": "energy_kwh",           # Common incorrect reference
+    "vehicle.id": "vehicles.vehicle_id",    # Common incorrect reference
+    "trip.id": "trips.trip_id",             # Common incorrect reference
+    "driver.id": "drivers.driver_id",       # Common incorrect reference
+    "trips.driver_id": "drivers.driver_id", # Incorrect join reference
+    "trip_distance": "trips.distance_km",   # Common incorrect reference
+    "distance": "trips.distance_km",        # Common simplified reference
+    "idle_min": "trips.idle_minutes",       # Common simplification
+    "duration": "trips.end_ts - trips.start_ts", # Common duration calculation
+    "registration": "vehicles.registration_no", # Common simplification
+    "temp_c": "trips.avg_temp_c",           # Common simplification
+    "trip_date": "trips.start_ts::date"     # Common date extraction
+}
+
+def _create_openai_system_prompt() -> str:
+    """Create the system prompt for OpenAI SQL generation."""
+    return """You are a SQL expert for a fleet management system. 
+            Generate PostgreSQL queries based on natural language questions.
+            Always include 'WHERE fleet_id = :fleet_id' in your queries for security.
+            Always include 'LIMIT 5000' at the end of your queries.
+            Only use SELECT statements, never INSERT, UPDATE, DELETE, etc.
+            Do not use SQL comments in your queries.
+            Return the SQL query without any explanation or formatting.
+            You must generate a valid PostgreSQL SELECT query.
+            
+            CRITICAL SCHEMA INFORMATION - READ CAREFULLY:
+            1. The vehicles table does NOT have these columns:
+               - NO 'active' column
+               - NO 'last_active_date' column
+            
+            2. NEVER use 'active = TRUE' or any variation in your SQL queries
+            
+            3. For "active" vehicles:
+               - A vehicle is considered "active" if it has trips in the current month
+               - Use this pattern: 
+            """ + ACTIVE_VEHICLES_SQL_PATTERN + """
+            
+            4. For "last active date":
+               - Use: "(SELECT MAX(trips.start_ts) FROM trips WHERE trips.vehicle_id = vehicles.vehicle_id)"
+            
+            5. Other schema details:
+               - Vehicle models are stored in the 'model' column of the vehicles table
+               - For time-based queries, use the trips table with start_ts and end_ts columns
+               
+            6. Use PostgreSQL date functions, NOT MySQL functions:
+               * For "last week": start_ts >= CURRENT_DATE - INTERVAL '7 days'
+               * For "this month": start_ts >= DATE_TRUNC('month', CURRENT_DATE)
+               * For "last month": start_ts >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+               * Never use DATE_SUB(), CURDATE(), or INTERVAL x WEEK syntax
+            
+            Important: You must return the SQL query in the 'sql' parameter of the function call.
+            Do NOT return the query in the 'query' parameter or any other parameter.
+            Do NOT include vehicle IDs in the fleet_id parameter - use them in the SQL WHERE clause.
+            
+            When interpreting the user query, use the domain glossary provided to understand 
+            fleet-specific terminology and data model relationships."""
+
+def _parse_openai_function_args(function_call) -> dict:
+    """Parse and validate OpenAI function call arguments."""
+    if not function_call:
+        print("OpenAI response missing function call")
+        raise ValueError("OpenAI response missing function call structure")
+        
+    try:
+        return json.loads(function_call.arguments)
+    except json.JSONDecodeError as e:
+        print(f"Failed to decode OpenAI function arguments: {str(e)}")
+        print(f"Raw arguments received: {function_call.arguments}")
+        raise ValueError(f"Invalid function arguments from OpenAI: {str(e)}")
+
+def _extract_sql_from_openai_response(function_args: dict) -> str:
+    """Extract SQL from OpenAI function arguments, with fallback logic."""
+    sql = function_args.get("sql", "")
+    
+    # If SQL is empty, try to find it elsewhere in the response
+    if not sql:
+        # Check if there's a query field that might contain SQL instead
+        potential_sql = function_args.get("query", "")
+        if potential_sql and "SELECT" in potential_sql.upper():
+            print(f"OpenAI returned SQL in query field instead of sql field: {potential_sql}")
+            return potential_sql
+        
+        # Check if we have other content that looks like SQL
+        for key, value in function_args.items():
+            if isinstance(value, str) and "SELECT" in value.upper():
+                print(f"Found potential SQL in {key} field: {value}")
+                return value
+    
+    if not sql:
+        print(f"OpenAI returned empty SQL - function args: {function_args}")
+        raise ValueError("OpenAI returned empty SQL in response")
+        
+    return sql
 
 async def _openai_nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
     """Use OpenAI to convert natural language to SQL."""
-    # Configure client at runtime
-    # Import httpx for timeout configuration
     import httpx
     
-    # Configure client with a longer timeout (60 seconds)
-    # Use only supported parameters for the AsyncOpenAI client
     client = AsyncOpenAI(
         api_key=os.environ.get("OPENAI_API_KEY"),
         http_client=httpx.AsyncClient(timeout=60.0)
     )
     
     try:
-        # Prepare context with domain glossary
         context = prepare_sql_generation_context(query)
         print(f"Sending query to OpenAI: {query}")
         
-        # Only use parameters supported by the OpenAI API
+        system_prompt = _create_openai_system_prompt()
+                
         response = await client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": """You are a SQL expert for a fleet management system. 
-                Generate PostgreSQL queries based on natural language questions.
-                Always include 'WHERE fleet_id = :fleet_id' in your queries for security.
-                Always include 'LIMIT 5000' at the end of your queries.
-                Only use SELECT statements, never INSERT, UPDATE, DELETE, etc.
-                Do not use SQL comments in your queries.
-                Return the SQL query without any explanation or formatting.
-                You must generate a valid PostgreSQL SELECT query.
-                
-                Important schema details:
-                - The vehicles table does NOT have an 'active' column or 'last_active_date' column
-                - To determine if a vehicle is "active" in a given month, use the trips table and check if there are trips in that month
-                - For example: "active this month" means "there exists a trip in the trips table for this vehicle with start_ts in the current month"
-                - Use EXTRACT(MONTH FROM start_ts) = EXTRACT(MONTH FROM CURRENT_DATE) to check current month activity
-                - Use EXTRACT(YEAR FROM start_ts) = EXTRACT(YEAR FROM CURRENT_DATE) to ensure same year
-                - Vehicle models are stored in the 'model' column of the vehicles table
-                - For time-based queries, use the trips table with start_ts and end_ts columns
-                - Use PostgreSQL date functions, NOT MySQL functions:
-                  * For "last week": start_ts >= CURRENT_DATE - INTERVAL '7 days'
-                  * For "this month": start_ts >= DATE_TRUNC('month', CURRENT_DATE)
-                  * For "last month": start_ts >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
-                  * Never use DATE_SUB(), CURDATE(), or INTERVAL x WEEK syntax
-                
-                Important: You must return the SQL query in the 'sql' parameter of the function call.
-                Do NOT return the query in the 'query' parameter or any other parameter.
-                Do NOT include vehicle IDs in the fleet_id parameter - use them in the SQL WHERE clause.
-                
-                When interpreting the user query, use the domain glossary provided to understand 
-                fleet-specific terminology and data model relationships."""},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": context}
             ],
             functions=[
@@ -290,48 +339,14 @@ async def _openai_nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
                 }
             ],
             function_call={"name": "generate_sql"},
-            temperature=0.2,  # Lower temperature for more deterministic SQL generation
-            max_tokens=1000  # Ensure enough tokens for complete SQL
+            temperature=0.2,
+            max_tokens=1000
         )
         
-        # Log the raw response for debugging
         print(f"OpenAI raw response: {str(response)[:500]}...")
         
-        # Extract function call arguments
-        function_call = response.choices[0].message.function_call
-        if not function_call:
-            print("OpenAI response missing function call - raw response content:", str(response))
-            raise ValueError("OpenAI response missing function call structure")
-            
-        try:
-            function_args = json.loads(function_call.arguments)
-        except json.JSONDecodeError as e:
-            print(f"Failed to decode OpenAI function arguments: {str(e)}")
-            print(f"Raw arguments received: {function_call.arguments}")
-            raise ValueError(f"Invalid function arguments from OpenAI: {str(e)}")
-        
-        # Extract and validate SQL
-        sql = function_args.get("sql", "")
-        
-        # If SQL is empty, try to find it elsewhere in the response
-        if not sql:
-            # Check if there's a query field that might contain SQL instead
-            potential_sql = function_args.get("query", "")
-            if potential_sql and "SELECT" in potential_sql.upper():
-                print(f"OpenAI returned SQL in query field instead of sql field: {potential_sql}")
-                sql = potential_sql
-            else:
-                # Check if we have other content that looks like SQL
-                for key, value in function_args.items():
-                    if isinstance(value, str) and "SELECT" in value.upper():
-                        print(f"Found potential SQL in {key} field: {value}")
-                        sql = value
-                        break
-        
-        if not sql:
-            print(f"OpenAI returned empty SQL - function args: {function_args}")
-            raise ValueError("OpenAI returned empty SQL in response")
-            
+        function_args = _parse_openai_function_args(response.choices[0].message.function_call)
+        sql = _extract_sql_from_openai_response(function_args)
         extracted_sql = _validate_and_extract_sql(sql)
         
         return {"sql": extracted_sql}
@@ -367,19 +382,32 @@ async def _anthropic_nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
         7. DO NOT return an empty response
         8. Use the domain glossary provided above to understand fleet-specific terminology and tables
         
-        Important schema details:
-        - The vehicles table does NOT have an 'active' column or 'last_active_date' column
-        - To determine if a vehicle is "active" in a given month, use the trips table and check if there are trips in that month
-        - For example: "active this month" means "there exists a trip in the trips table for this vehicle with start_ts in the current month"
-        - Use EXTRACT(MONTH FROM start_ts) = EXTRACT(MONTH FROM CURRENT_DATE) to check current month activity
-        - Use EXTRACT(YEAR FROM start_ts) = EXTRACT(YEAR FROM CURRENT_DATE) to ensure same year
-        - Vehicle models are stored in the 'model' column of the vehicles table
-        - For time-based queries, use the trips table with start_ts and end_ts columns
-        - Use PostgreSQL date functions, NOT MySQL functions:
-          * For "last week": start_ts >= CURRENT_DATE - INTERVAL '7 days'
-          * For "this month": start_ts >= DATE_TRUNC('month', CURRENT_DATE)
-          * For "last month": start_ts >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
-          * Never use DATE_SUB(), CURDATE(), or INTERVAL x WEEK syntax
+        CRITICAL SCHEMA INFORMATION - READ CAREFULLY:
+        1. The vehicles table does NOT have these columns:
+           - NO 'active' column
+           - NO 'last_active_date' column
+        
+        2. NEVER use 'active = TRUE' or any variation in your SQL queries
+        
+        3. For "active" vehicles:
+           - A vehicle is considered "active" if it has trips in the current month
+           - Use this pattern: 
+             "vehicles.vehicle_id IN (SELECT DISTINCT trips.vehicle_id FROM trips 
+             WHERE EXTRACT(MONTH FROM trips.start_ts) = EXTRACT(MONTH FROM CURRENT_DATE)
+             AND EXTRACT(YEAR FROM trips.start_ts) = EXTRACT(YEAR FROM CURRENT_DATE))"
+        
+        4. For "last active date":
+           - Use: "(SELECT MAX(trips.start_ts) FROM trips WHERE trips.vehicle_id = vehicles.vehicle_id)"
+        
+        5. Other schema details:
+           - Vehicle models are stored in the 'model' column of the vehicles table
+           - For time-based queries, use the trips table with start_ts and end_ts columns
+           
+        6. Use PostgreSQL date functions, NOT MySQL functions:
+           * For "last week": start_ts >= CURRENT_DATE - INTERVAL '7 days'
+           * For "this month": start_ts >= DATE_TRUNC('month', CURRENT_DATE)
+           * For "last month": start_ts >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+           * Never use DATE_SUB(), CURDATE(), or INTERVAL x WEEK syntax
         
         SQL query:"""
         
@@ -442,19 +470,32 @@ async def _mistral_nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
         7. DO NOT return an empty response
         8. Use the domain glossary provided above to understand fleet-specific terminology and tables
         
-        Important schema details:
-        - The vehicles table does NOT have an 'active' column or 'last_active_date' column
-        - To determine if a vehicle is "active" in a given month, use the trips table and check if there are trips in that month
-        - For example: "active this month" means "there exists a trip in the trips table for this vehicle with start_ts in the current month"
-        - Use EXTRACT(MONTH FROM start_ts) = EXTRACT(MONTH FROM CURRENT_DATE) to check current month activity
-        - Use EXTRACT(YEAR FROM start_ts) = EXTRACT(YEAR FROM CURRENT_DATE) to ensure same year
-        - Vehicle models are stored in the 'model' column of the vehicles table
-        - For time-based queries, use the trips table with start_ts and end_ts columns
-        - Use PostgreSQL date functions, NOT MySQL functions:
-          * For "last week": start_ts >= CURRENT_DATE - INTERVAL '7 days'
-          * For "this month": start_ts >= DATE_TRUNC('month', CURRENT_DATE)
-          * For "last month": start_ts >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
-          * Never use DATE_SUB(), CURDATE(), or INTERVAL x WEEK syntax
+        CRITICAL SCHEMA INFORMATION - READ CAREFULLY:
+        1. The vehicles table does NOT have these columns:
+           - NO 'active' column
+           - NO 'last_active_date' column
+        
+        2. NEVER use 'active = TRUE' or any variation in your SQL queries
+        
+        3. For "active" vehicles:
+           - A vehicle is considered "active" if it has trips in the current month
+           - Use this pattern: 
+             "vehicles.vehicle_id IN (SELECT DISTINCT trips.vehicle_id FROM trips 
+             WHERE EXTRACT(MONTH FROM trips.start_ts) = EXTRACT(MONTH FROM CURRENT_DATE)
+             AND EXTRACT(YEAR FROM trips.start_ts) = EXTRACT(YEAR FROM CURRENT_DATE))"
+        
+        4. For "last active date":
+           - Use: "(SELECT MAX(trips.start_ts) FROM trips WHERE trips.vehicle_id = vehicles.vehicle_id)"
+        
+        5. Other schema details:
+           - Vehicle models are stored in the 'model' column of the vehicles table
+           - For time-based queries, use the trips table with start_ts and end_ts columns
+           
+        6. Use PostgreSQL date functions, NOT MySQL functions:
+           * For "last week": start_ts >= CURRENT_DATE - INTERVAL '7 days'
+           * For "this month": start_ts >= DATE_TRUNC('month', CURRENT_DATE)
+           * For "last month": start_ts >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+           * Never use DATE_SUB(), CURDATE(), or INTERVAL x WEEK syntax
         
         SQL query:"""
         
@@ -501,53 +542,91 @@ async def sql_exec(sql: str, fleet_id: int) -> Dict[str, Any]:
     Returns:
         Dict with rows or download_url
     """
+    print(f"sql_exec called with SQL: {sql[:100]}... and fleet_id: {fleet_id}")
+    
     try:
+        # Use database operations helper functions
         async with engine.connect() as conn:
-            # Set statement timeout to 20 seconds (20000ms)
-            await conn.execute(sa.text("SET statement_timeout = 20000"))
+            # Set up database session
+            await setup_database_session(conn, fleet_id)
             
-            # Set fleet_id for RLS - use direct string formatting for SET command
-            # PostgreSQL doesn't support parameter binding for SET statements
-            fleet_id_sql = f"SET app.fleet_id = {fleet_id}"
-            await conn.execute(sa.text(fleet_id_sql))
+            # Execute query and handle rows
+            from sql_assistant.services.db_operations import execute_sql_query
+            rows, error = await execute_sql_query(conn, sql, {"fleet_id": fleet_id})
             
-            # Execute query with parameters
-            result = await conn.execute(
-                sa.text(sql),
-                {"fleet_id": fleet_id}
-            )
+            # Handle errors
+            if error:
+                return await handle_sql_error(error, sql, fleet_id)
             
-            # Fetch all rows
-            rows = [dict(row) for row in result.mappings()]
-            
-            # Check if result is large (>100 rows)
+            # Handle large results
             if len(rows) > 100:
-                # Generate unique filename
-                filename = f"{uuid.uuid4()}.csv"
-                filepath = os.path.join(STATIC_DIR, filename)
-                
-                # Write to CSV
-                with open(filepath, 'w', newline='') as f:
-                    if rows:
-                        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
-                        writer.writeheader()
-                        writer.writerows(rows)
-                    else:
-                        writer = csv.writer(f)
-                        writer.writerow(["No results"])
-                
-                # Return download URL
-                return {
-                    "download_url": f"/static/{filename}",
-                    "row_count": len(rows)
-                }
+                from sql_assistant.services.db_operations import handle_large_result
+                return handle_large_result(rows)
             else:
                 # Return rows directly
                 return {"rows": rows}
-    
+                
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error executing SQL: {str(e)}")
+        error_message = f"Error executing SQL: {str(e)}"
+        print(error_message)
+        return {
+            "rows": [], 
+            "error": error_message
+        }
 
+async def setup_database_session(conn, fleet_id: int) -> None:
+    """
+    Set up database session with timeouts and fleet ID.
+    
+    Args:
+        conn: Database connection
+        fleet_id: Fleet ID for filtering
+    """
+    # Set statement timeout to 20 seconds (20000ms)
+    await conn.execute(sa.text("SET statement_timeout = 20000"))
+    
+    # Set fleet_id for RLS - use direct string formatting for SET command
+    # PostgreSQL doesn't support parameter binding for SET statements
+    fleet_id_sql = f"SET app.fleet_id = {fleet_id}"
+    await conn.execute(sa.text(fleet_id_sql))
+
+async def handle_sql_error(error: str, sql: str, fleet_id: int) -> Dict[str, Any]:
+    """
+    Handle SQL execution errors and try to recover.
+    
+    Args:
+        error: Error message
+        sql: SQL query that caused the error
+        fleet_id: Fleet ID for filtering
+        
+    Returns:
+        Result dictionary with error or corrected results
+    """
+    # Special handling for column-not-exists errors
+    bad_column = extract_bad_column(error)
+    
+    if bad_column:
+        # Try to correct the SQL using the column corrections
+        corrected_column = handle_column_error(bad_column, COLUMN_CORRECTIONS)
+        if corrected_column:
+            # Try to correct the SQL
+            corrected_sql = _correct_invalid_columns(sql)
+            
+            if corrected_sql and corrected_sql != sql:
+                # Try executing with the corrected SQL
+                print(f"Attempting query with corrected column reference: {corrected_sql[:100]}...")
+                try:
+                    return await sql_exec(corrected_sql, fleet_id)
+                except Exception as retry_error:
+                    print(f"Error with corrected SQL: {str(retry_error)}")
+    
+    # If we reach here, we couldn't fix the query automatically
+    friendly_error = f"SQL execution error: {error}"
+    print(friendly_error)
+    return {
+        "rows": [], 
+        "error": friendly_error
+    }
 def glossary_to_string(glossary: dict, include_why_it_matters: bool = True) -> str:
     """
     Format the glossary as a readable string for LLM context.
@@ -594,6 +673,10 @@ def _prepare_answer_context(query: str, sql_result: Dict[str, Any], sql: str) ->
     Returns:
         Context string for LLM
     """
+    # Handle case where sql_result might not be a dict
+    if not isinstance(sql_result, dict):
+        sql_result = {"rows": [], "error": "Invalid SQL result format"}
+    
     rows = sql_result.get("rows", [])
     row_count = sql_result.get("row_count", len(rows) if rows else 0)
     is_fallback = sql_result.get("is_fallback", False)
@@ -605,14 +688,33 @@ def _prepare_answer_context(query: str, sql_result: Dict[str, Any], sql: str) ->
         "is_fallback": is_fallback
     }
     
-    if rows:
-        context["rows"] = rows[:10]
-    else:
-        context["download_url"] = sql_result.get("download_url", "")
+    # Handle different result types
+    if "error" in sql_result:
+        context["error"] = sql_result["error"]
     
-    context_str = json.dumps(context, default=str, indent=2)
+    if rows:
+        # Limit to first 10 rows to avoid context size issues
+        context["rows"] = rows[:10]
+    elif "download_url" in sql_result:
+        context["download_url"] = sql_result["download_url"]
+    
+    # Use default=str to handle non-serializable objects
+    try:
+        context_str = json.dumps(context, default=str, indent=2)
+    except Exception as e:
+        print(f"Error serializing context to JSON: {str(e)}")
+        # Fallback to a simpler context
+        context = {
+            "query": query,
+            "sql": sql,
+            "row_count": row_count,
+            "is_fallback": is_fallback,
+            "error": "Error serializing full results"
+        }
+        context_str = json.dumps(context, default=str, indent=2)
+    
     glossary_str = glossary_to_string(DOMAIN_GLOSSARY)
-    return "Domain Glossary:\n{}\n\n{}".format(glossary_str, context_str)
+    return f"Domain Glossary:\n{glossary_str}\n\nContext:\n{context_str}"
 
 async def answer_format(query: str, sql_result: Dict[str, Any], sql: str) -> str:
     """
@@ -627,20 +729,46 @@ async def answer_format(query: str, sql_result: Dict[str, Any], sql: str) -> str
         Human-readable answer
     """
     try:
-        OPENAI_API_KEY, ANTHROPIC_API_KEY, MISTRAL_API_KEY = _check_llm_api_keys()
+        # Check for errors in the SQL execution result
+        if sql_result.get("error"):
+            error_message = sql_result.get("error")
+            print(f"Error from SQL execution passed to answer_format: {error_message}")
+            
+            # Handle column does not exist errors
+            if "column" in error_message.lower() and "does not exist" in error_message.lower():
+                column_match = re.search(r'column ([\w.]+) does not exist', error_message, re.IGNORECASE)
+                if column_match:
+                    bad_column = column_match.group(1)
+                    
+                    # Energy column error handling - specific to our schema issue
+                    if "energy" in bad_column.lower() and "trips" in bad_column.lower():
+                        return f"I encountered an error with the column '{bad_column}'. In our database, the trips table has 'energy_kwh' instead of just 'energy'."
+                    
+                    # General column error
+                    return f"I encountered an error with the column '{bad_column}' which doesn't exist in our database."
+            
+            # Default error message for other types
+            return f"I encountered an error: {error_message}. Please try again with a different question."
+        
+        # Proceed with normal formatting if no errors
+        OPENAI_API_KEY, ANTHROPIC_API_KEY, MISTRAL_API_KEY = check_llm_api_keys()
         full_context = _prepare_answer_context(query, sql_result, sql)
         
-        if OPENAI_API_KEY:
-            return await _openai_answer_format(full_context)
-        elif ANTHROPIC_API_KEY:
-            return await _anthropic_answer_format(full_context)
-        elif MISTRAL_API_KEY:
-            return await _mistral_answer_format(full_context)
-        else:
-            raise HTTPException(status_code=500, detail="No LLM API key configured")
+        # Try to generate answer with the first available LLM provider
+        return await _try_llm_provider(full_context, OPENAI_API_KEY, ANTHROPIC_API_KEY, MISTRAL_API_KEY)
+    
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error formatting answer: {str(e)}")
-
+        print(f"Error in answer_format: {str(e)}")
+        # Create simple context for fallback
+        simple_context = {
+            "query": query,
+            "rows": sql_result.get("rows", []),
+            "row_count": len(sql_result.get("rows", [])),
+            "download_url": sql_result.get("download_url"),
+            "error": str(e)
+        }
+        # Use the fallback formatter with our simple context
+        return await _format_answer_fallback(simple_context)
 async def _openai_answer_format(context_str: str) -> str:
     """Use OpenAI to format results into a human-readable answer."""
     # Configure client at runtime
@@ -758,7 +886,13 @@ async def process_query(query: str, fleet_id: int) -> Tuple[str, str, Optional[L
     
     # Step 3: Format answer
     answer_prefix = "Note: I couldn't generate a specific SQL query for your question, so I'm showing you a general result. " if is_fallback else ""
-    context_with_fallback = {"is_fallback": is_fallback, **exec_result}
+    # Make sure exec_result contains the is_fallback flag
+    if isinstance(exec_result, dict):
+        context_with_fallback = {"is_fallback": is_fallback, **exec_result}
+    else:
+        # Handle case where exec_result might not be a dict
+        context_with_fallback = {"is_fallback": is_fallback, "rows": []}
+    
     print("Formatting answer...")
     answer = await answer_format(query, context_with_fallback, sql)
     print(f"Answer formatting complete: {answer[:50]}...")
@@ -774,3 +908,206 @@ async def process_query(query: str, fleet_id: int) -> Tuple[str, str, Optional[L
     result = (answer, sql, rows, download_url, is_fallback)
     print(f"process_query returning {len(result)} values: {is_fallback=}")
     return result
+
+def _apply_direct_column_corrections(sql: str) -> str:
+    """Apply direct column corrections for known incorrect references."""
+    modified_sql = sql
+    for incorrect, correct in COLUMN_CORRECTIONS.items():
+        pattern = r'\b' + re.escape(incorrect) + r'\b'
+        modified_sql = re.sub(pattern, correct, modified_sql, flags=re.IGNORECASE)
+    return modified_sql
+
+def _find_closest_column_match(column_name: str, valid_columns: list) -> str:
+    """Find the closest matching column name using string distance."""
+    closest_match = None
+    min_distance = float('inf')
+    
+    for valid_col in valid_columns:
+        distance = _levenshtein_distance(column_name, valid_col.lower())
+        if distance < min_distance:
+            min_distance = distance
+            closest_match = valid_col
+    
+    # Only return match if reasonably close (distance < 5)
+    return closest_match if min_distance < 5 else None
+
+def _correct_table_column_references(sql: str) -> str:
+    """Correct table.column references that don't exist in the schema."""
+    modified_sql = sql
+    
+    for table_name, columns in TABLE_COLUMNS.items():
+        table_column_pattern = r'\b' + re.escape(table_name) + r'\.([a-zA-Z0-9_]+)\b'
+        
+        for match in re.finditer(table_column_pattern, modified_sql, re.IGNORECASE):
+            column_name = match.group(1).lower()
+            
+            # If referenced column doesn't exist in this table
+            if column_name not in [col.lower() for col in columns]:
+                print(f"🔄 Found invalid column reference: {table_name}.{column_name}")
+                
+                closest_match = _find_closest_column_match(column_name, columns)
+                if closest_match:
+                    replacement = f"{table_name}.{closest_match}"
+                    old_reference = match.group(0)
+                    print(f"🔄 Replacing {old_reference} with {replacement}")
+                    modified_sql = modified_sql.replace(old_reference, replacement)
+    
+    return modified_sql
+
+def _correct_invalid_columns(sql: str) -> str:
+    """
+    Correct references to non-existent columns in SQL queries.
+    
+    Args:
+        sql: Original SQL query
+        
+    Returns:
+        SQL with column references corrected
+    """
+    # Apply direct column corrections
+    modified_sql = _apply_direct_column_corrections(sql)
+    
+    # Correct table.column references
+    modified_sql = _correct_table_column_references(modified_sql)
+    
+    if modified_sql != sql:
+        print("✅ Column references corrected")
+        print(f"BEFORE: {sql}")
+        print(f"AFTER:  {modified_sql}")
+        
+    return modified_sql
+
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """
+    Calculate the Levenshtein distance between two strings.
+    Used to find similar column names.
+    """
+    if len(s1) < len(s2):
+        return _levenshtein_distance(s2, s1)
+
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+        
+    return previous_row[-1]
+
+async def _format_answer_fallback(context: Union[str, Dict]) -> str:
+    """
+    Fallback formatter when LLM providers fail.
+    
+    Args:
+        context: Context for answer formatting (can be a string or dictionary)
+        
+    Returns:
+        Basic formatted answer
+    """
+    try:
+        # Parse the context JSON if it's a string
+        if isinstance(context, str):
+            # Try to extract the JSON part from the context
+            json_match = re.search(r'Context:\s*(.*)$', context, re.DOTALL)
+            if json_match:
+                context_json = json_match.group(1).strip()
+                context_data = json.loads(context_json)
+            else:
+                # If we can't find the JSON, just return a generic message
+                return "Query completed. Please check the results table."
+        else:
+            context_data = context
+        
+        # Extract the data we need
+        query = context_data.get("query", "")
+        rows = context_data.get("rows", [])
+        row_count = context_data.get("row_count", 0)
+        download_url = context_data.get("download_url")
+        
+        # Create a basic response
+        if download_url:
+            return f"Your query about '{query}' returned {row_count} rows, which can be downloaded using the provided link."
+        elif rows and len(rows) > 0:
+            if len(rows) == 1 and len(rows[0].keys()) == 1:
+                # Single value result
+                key = list(rows[0].keys())[0]
+                value = rows[0][key]
+                return f"Result for '{query}': {value}"
+            else:
+                # Multi-row or multi-column result
+                return f"Your query about '{query}' returned {len(rows)} results. Please check the results table."
+        else:
+            return f"Your query about '{query}' did not return any results."
+    except Exception as e:
+        print(f"Error in fallback formatter: {str(e)}")
+        return "Query completed. Please check the results table."
+
+async def _try_openai_answer_format(context: str) -> Optional[str]:
+    """Try to format answer using OpenAI."""
+    try:
+        answer = await _openai_answer_format(context)
+        return answer if answer else None
+    except Exception as e:
+        print(f"OpenAI error: {str(e)}")
+        return None
+
+async def _try_anthropic_answer_format(context: str) -> Optional[str]:
+    """Try to format answer using Anthropic."""
+    try:
+        answer = await _anthropic_answer_format(context)
+        return answer if answer else None
+    except Exception as e:
+        print(f"Anthropic error: {str(e)}")
+        return None
+
+async def _try_mistral_answer_format(context: str) -> Optional[str]:
+    """Try to format answer using Mistral."""
+    try:
+        answer = await _mistral_answer_format(context)
+        return answer if answer else None
+    except Exception as e:
+        print(f"Mistral error: {str(e)}")
+        return None
+
+async def _try_llm_provider(context: str, openai_key: Optional[str], anthropic_key: Optional[str], mistral_key: Optional[str]) -> str:
+    """
+    Try to generate an answer using available LLM providers.
+    
+    Args:
+        context: Context for answer formatting
+        openai_key: OpenAI API key if available
+        anthropic_key: Anthropic API key if available  
+        mistral_key: Mistral API key if available
+        
+    Returns:
+        Formatted answer from the first successful LLM provider
+    """
+    # Try providers in order of preference
+    providers_to_try = [
+        (openai_key, _try_openai_answer_format, "OpenAI"),
+        (anthropic_key, _try_anthropic_answer_format, "Anthropic"), 
+        (mistral_key, _try_mistral_answer_format, "Mistral")
+    ]
+    
+    failed_providers = []
+    
+    for api_key, provider_func, provider_name in providers_to_try:
+        if api_key:
+            answer = await provider_func(context)
+            if answer:
+                return answer
+            failed_providers.append(provider_name)
+    
+    # Handle fallback
+    if failed_providers:
+        print(f"All LLM providers failed: {'; '.join(failed_providers)}")
+    else:
+        print("No LLM API keys available")
+    
+    return await _format_answer_fallback(context)

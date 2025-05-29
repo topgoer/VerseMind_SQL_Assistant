@@ -63,5 +63,5 @@ USER appuser
 # Expose port
 EXPOSE 8000
 
-# Start the application
-CMD ["uvicorn", "sql_assistant.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start the application with warning log level to suppress health check logs
+CMD ["uvicorn", "sql_assistant.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "warning"]

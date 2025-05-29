@@ -5,9 +5,10 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/card'
 import { Textarea } from './ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Resizable } from 're-resizable';
-import { ChevronRight, Send, Download } from 'lucide-react';
+import { Send, Download } from 'lucide-react';
 
 interface Message {
+  id: string;
   role: 'user' | 'assistant';
   content: string;
 }
@@ -24,8 +25,22 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
   const [sqlQuery, setSqlQuery] = useState('');
   const [results, setResults] = useState<any[] | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [mcpTrace, setMcpTrace] = useState<any | null>(null);
+  const [mcpTrace, setMcpTrace] = useState<object | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Helper function to format cell values safely
+  const formatCellValue = (value: any): string => {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    return String(value);
+  };
 
   // Scroll to bottom of messages
   useEffect(() => {
@@ -47,13 +62,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
     localStorage.setItem('jwt_token', jwtToken);
 
     // Add user message
-    setMessages([...messages, { role: 'user', content: input }]);
+    setMessages([...messages, { id: crypto.randomUUID(), role: 'user', content: input }]);
     setIsLoading(true);
 
     try {
       if (mode === 'chat') {
-        // Call /chat endpoint
-        const response = await fetch('/chat', {
+        // Call /chat endpoint with absolute URL
+        const response = await fetch('http://localhost:8001/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -69,14 +84,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
         const data = await response.json();
         
         // Update state with response
-        setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
-        setSqlQuery(data.sql);
-        setResults(data.rows || null);
-        setDownloadUrl(data.download_url || null);
+        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: data.answer }]);
+        setSqlQuery(data.sql ?? '');
+        setResults(data.rows ?? null);
+        setDownloadUrl(data.download_url ?? null);
         setMcpTrace(null);
       } else {
-        // Call /mcp endpoint
-        const response = await fetch('/mcp', {
+        // Call /mcp endpoint with absolute URL
+        const response = await fetch('http://localhost:8001/mcp', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -105,15 +120,15 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
         const answerStep = data.steps.find((s: any) => s.tool === 'answer_format');
         
         // Update state with response
-        setMessages(prev => [...prev, { role: 'assistant', content: answerStep?.output || 'No answer generated' }]);
-        setSqlQuery(nlToSqlStep?.output?.sql || '');
-        setResults(sqlExecStep?.output?.rows || null);
-        setDownloadUrl(sqlExecStep?.output?.download_url || null);
+        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: answerStep?.output ?? 'No answer generated' }]);
+        setSqlQuery(nlToSqlStep?.output?.sql ?? '');
+        setResults(sqlExecStep?.output?.rows ?? null);
+        setDownloadUrl(sqlExecStep?.output?.download_url ?? null);
         setMcpTrace(data);
       }
     } catch (error) {
       console.error('Error:', error);
-      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]);
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` }]);
     } finally {
       setIsLoading(false);
       setInput('');
@@ -143,9 +158,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
         
         <CardContent className="flex-grow overflow-auto p-4">
           <div className="space-y-4">
-            {messages.map((message, index) => (
+            {messages.map((message) => (
               <div 
-                key={index} 
+                key={message.id} 
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div 
@@ -193,41 +208,55 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
               </TabsContent>
               
               <TabsContent value="results" className="mt-2">
-                {results ? (
-                  <div className="overflow-auto max-h-32">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          {Object.keys(results[0]).map((key) => (
-                            <th 
-                              key={key}
-                              className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                            >
-                              {key}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {results.map((row, i) => (
-                          <tr key={i}>
-                            {Object.values(row).map((value: any, j) => (
-                              <td key={j} className="px-3 py-2 text-sm text-gray-500">
-                                {value !== null ? String(value) : ''}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : downloadUrl ? (
-                  <div className="text-center p-4">
-                    <p>Large result set available for download</p>
-                  </div>
-                ) : (
-                  <div className="text-center p-4">No results available</div>
-                )}
+                {(() => {
+                  if (results && results.length > 0 && results[0] && typeof results[0] === 'object') {
+                    return (
+                      <div className="overflow-auto max-h-32">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              {Object.keys(results[0]).map((key) => (
+                                <th 
+                                  key={key}
+                                  className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                >
+                                  {key}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {results.map((row) => {
+                              // Create a stable composite key using row values
+                              const rowKey = row && typeof row === 'object' ? 
+                                `row-${JSON.stringify(row).substring(0, 100)}` : `row-${crypto.randomUUID()}`;
+                                
+                              return (
+                                <tr key={rowKey}>
+                                  {row && typeof row === 'object' && Object.entries(row).map(([key, value]) => (
+                                    <td key={`${rowKey}-${key}`} className="px-3 py-2 text-sm text-gray-500">
+                                      {formatCellValue(value)}
+                                    </td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  } else if (downloadUrl) {
+                    return (
+                      <div className="text-center p-4">
+                        <p>Large result set available for download</p>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div className="text-center p-4">No results available</div>
+                    );
+                  }
+                })()}
               </TabsContent>
               
               {mode === 'mcp' && (

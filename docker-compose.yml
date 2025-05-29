@@ -18,7 +18,7 @@ services:
       - ./static:/app/static:ro
       - ./public.pem:/app/public.pem:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ping')"]
+      test: ["CMD", "python", "-c", "import urllib.request; req = urllib.request.Request('http://localhost:8000/ping', method='HEAD'); urllib.request.urlopen(req)"]
       interval: 30s
       timeout: 5s
       retries: 3

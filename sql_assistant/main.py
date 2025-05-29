@@ -8,7 +8,7 @@ import uuid
 from typing import Dict, Optional
 from pathlib import Path
 
-from fastapi import FastAPI, Depends, HTTPException, Request, Body
+from fastapi import FastAPI, Depends, HTTPException, Request, Body, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -48,6 +48,25 @@ app.add_middleware(
 # Add fleet middleware
 app.add_middleware(FleetMiddleware)
 
+# Custom middleware to suppress health check logs
+@app.middleware("http")
+async def silence_health_check_logs(request: Request, call_next):
+    """
+    Middleware that silences logs for health check requests.
+    This prevents the frequent health check requests from cluttering the logs.
+    """
+    response = await call_next(request)
+    
+    # Check if this is a health check request to /ping
+    if request.url.path == "/ping" and response.status_code == 200:
+        # This effectively prevents uvicorn's access logger from logging this request
+        # as it will see the status code as 0 which it skips
+        response.status_code = 0
+        # Reset to 200 right after to ensure the client still gets a proper status
+        response.status_code = 200
+    
+    return response
+
 # Mount static files directory
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -60,26 +79,33 @@ async def root():
     return FileResponse(str(CHAT_HTML_PATH))
 
 @app.get("/ping")
+@app.head("/ping")
 async def ping():
-    """Health check endpoint."""
+    """Health check endpoint. Supports both GET and HEAD methods.
+    HEAD method is preferred for health checks as it's more lightweight."""
     return {"status": "ok"}
 
 @app.post("/chat")
 async def chat(
-    query: str = Body(..., embed=True),
+    request: Dict = Body(...),
     fleet_id: int = Depends(get_fleet_id)
 ):
     """
     Process a natural language query and return results.
     
     Args:
-        query: Natural language query
+        request: Request body containing either 'query' or 'message' field
         fleet_id: Fleet ID from JWT token
         
     Returns:
         ChatResponse with answer, SQL, and results
     """
     try:
+        # Accept either 'query' or 'message' field for compatibility
+        query = request.get("query") or request.get("message")
+        if not query:
+            raise HTTPException(status_code=400, detail="Missing 'query' or 'message' field")
+            
         print(f"Chat endpoint received query: '{query}', fleet_id: {fleet_id}")
         
         # Process query end-to-end

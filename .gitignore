@@ -47,7 +47,6 @@ frontend/build/
 # Database
 *.sqlite3
 *.db
-upload/  # Database seed files directory
 
 # Temporary files
 temp/
