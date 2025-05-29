@@ -1,0 +1,5 @@
+alert_id,vehicle_id,alert_type,severity,alert_ts,value,threshold,resolved_bool,resolved_ts
+1,1,HighTemp,High,2025-05-14T12:00:00,34.1,33,False,
+2,2,Overcharge,Medium,2025-05-14T10:00:00,95.0,90,True,2025-05-14T11:00:00
+3,4,LowSOC,Medium,2025-05-14T09:00:00,15.0,20,False,
+4,5,HighTemp,Low,2025-05-14T07:00:00,32.0,33,True,2025-05-14T08:00:00

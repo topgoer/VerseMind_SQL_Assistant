@@ -1,0 +1,52 @@
+# Version is now inferred automatically by Docker Compose
+services:
+  web:
+    build: .
+    ports:
+      - "8001:8000"
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:?Database password must be set}@db:5432/sql_assistant
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      # JWT_PUBLIC_KEY is provided via volume mount at /app/public.pem
+      - ENABLE_MCP=${ENABLE_MCP:-0}
+      - PORT=8000
+    volumes:
+      - ./static:/app/static:ro
+      - ./public.pem:/app/public.pem:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ping')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?Database password must be set}
+      - POSTGRES_DB=sql_assistant
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+
+  seed:
+    build: .
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:?Database password must be set}@db:5432/sql_assistant
+    volumes:
+      - ./upload:/home/ubuntu/upload
+      - ./public.pem:/app/public.pem:ro
+      - ./scripts/run_seed.sh:/app/scripts/run_seed.sh:ro
+    command: bash /app/scripts/run_seed.sh
+    profiles:
+      - seed
+
+volumes:
+  postgres_data:

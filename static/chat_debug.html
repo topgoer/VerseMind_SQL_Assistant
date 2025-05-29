@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VerseMind SQL Assistant (Debug)</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        h1 {
+            margin: 0;
+            color: #2c3e50;
+        }
+        .input-section {
+            margin-bottom: 20px;
+        }
+        .jwt-input {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .output-section {
+            margin-top: 30px;
+        }
+        .output-container {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            margin-bottom: 20px;
+        }
+        .output-container h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: Consolas, monospace;
+            font-size: 14px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left: 4px solid #4CAF50;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #ffcdd2;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .download-container {
+            margin-top: 20px;
+            display: none;
+        }
+        .download-btn {
+            display: inline-block;
+            background-color: #2196F3;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+        }
+        .download-btn:hover {
+            background-color: #0b7dda;
+        }
+        .examples {
+            margin-bottom: 20px;
+        }
+        .example-query {
+            display: inline-block;
+            background-color: #e0e0e0;
+            padding: 5px 10px;
+            margin: 5px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .example-query:hover {
+            background-color: #d0d0d0;
+        }
+        .debug {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>VerseMind SQL Assistant (Debug Mode)</h1>
+        </header>
+
+        <div class="debug">
+            <strong>Debug Mode Enabled</strong>: Enhanced logging and improved error handling
+        </div>
+        
+        <div class="input-section">
+            <div class="jwt-input">
+                <label for="jwt-token">JWT Token:</label>
+                <input type="text" id="jwt-token" placeholder="Enter your JWT token">
+            </div>
+            
+            <label for="query-input">Your Query:</label>
+            <textarea id="query-input" placeholder="Ask a question about your fleet data..."></textarea>
+            
+            <div class="examples">
+                <p><strong>Example Queries:</strong></p>
+                <span class="example-query">How many vehicles are in my fleet?</span>
+                <span class="example-query">Show me the 10 drivers with the most miles driven</span>
+                <span class="example-query">What was my fleet's average fuel economy last month?</span>
+            </div>
+            
+            <button id="submit-btn">Submit</button>
+        </div>
+        
+        <div class="error" id="error-container"></div>
+        
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Processing your query...</p>
+        </div>
+        
+        <div id="output-section" style="display:none;">
+            <div class="output-container">
+                <h3>Answer</h3>
+                <div id="answer-output"></div>
+            </div>
+            
+            <div class="output-container">
+                <h3>SQL Query</h3>
+                <pre id="sql-output"></pre>
+            </div>
+            
+            <div class="output-container">
+                <h3>Results</h3>
+                <div id="table-container"></div>
+                <div id="download-container" class="download-container">
+                    <p>The result set is too large to display. Download the CSV file instead:</p>
+                    <a href="#" id="download-link" class="download-btn">Download Results (CSV)</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const jwtInput = document.getElementById('jwt-token');
+            const queryInput = document.getElementById('query-input');
+            const submitBtn = document.getElementById('submit-btn');
+            const loadingDiv = document.querySelector('.loading');
+            const outputSection = document.getElementById('output-section');
+            const answerOutput = document.getElementById('answer-output');
+            const sqlOutput = document.getElementById('sql-output');
+            const tableContainer = document.getElementById('table-container');
+            const downloadContainer = document.getElementById('download-container');
+            const downloadLink = document.getElementById('download-link');
+            const errorContainer = document.getElementById('error-container');
+            const exampleQueries = document.querySelectorAll('.example-query');
+
+            // Check for saved JWT token
+            const savedToken = localStorage.getItem('jwt_token');
+            if (savedToken) {
+                jwtInput.value = savedToken;
+            }
+
+            // Example query click handler
+            exampleQueries.forEach(example => {
+                example.addEventListener('click', function() {
+                    queryInput.value = this.textContent;
+                });
+            });
+
+            // Submit button click handler
+            submitBtn.addEventListener('click', async function() {
+                const jwt = jwtInput.value.trim();
+                const query = queryInput.value.trim();
+
+                if (!jwt) {
+                    showError('Please enter a JWT token');
+                    return;
+                }
+
+                if (!query) {
+                    showError('Please enter a query');
+                    return;
+                }
+
+                // Save JWT token for convenience
+                localStorage.setItem('jwt_token', jwt);
+
+                // Show loading, hide previous results and errors
+                loadingDiv.style.display = 'block';
+                outputSection.style.display = 'none';
+                errorContainer.style.display = 'none';
+
+                try {
+                    // Add more detailed logging
+                    console.group('API Request Details');
+                    console.log('Query:', query);
+                    console.log('Request URL: http://localhost:8001/chat');
+                    console.log('JWT token (first 10 chars):', jwt.substring(0, 10) + '...');
+                    console.log('JWT length:', jwt.length, 'characters');
+                    
+                    const requestBody = JSON.stringify({ query });
+                    console.log('Request body:', requestBody);
+                    console.groupEnd();
+                    
+                    // Log headers and request configuration
+                    const headers = {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${jwt}`
+                    };
+                    console.group('Request Configuration');
+                    console.log('Headers:', headers);
+                    console.log('Method: POST');
+                    console.groupEnd();
+                    
+                    console.log('Sending fetch request...');
+                    
+                    // Create AbortController for timeout
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+                    
+                    const response = await fetch('http://localhost:8001/chat', {
+                        method: 'POST',
+                        headers: headers,
+                        body: requestBody,
+                        signal: controller.signal
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    console.group('Response Details');
+                    console.log('Status:', response.status);
+                    console.log('Status Text:', response.statusText);
+                    console.log('Headers:', Object.fromEntries([...response.headers.entries()]));
+                    console.groupEnd();
+
+                    if (!response.ok) {
+                        console.group('Error Response');
+                        console.error('Error status:', response.status, response.statusText);
+                        
+                        // Try to read the response as text first
+                        const responseText = await response.text();
+                        console.log('Raw response text:', responseText);
+                        
+                        // Then try to parse as JSON if possible
+                        let errorData;
+                        try {
+                            errorData = JSON.parse(responseText);
+                            console.log('Parsed error data:', errorData);
+                        } catch (parseError) {
+                            console.error('Failed to parse error response as JSON:', parseError);
+                            errorData = { detail: responseText || 'Unknown error occurred' };
+                        }
+                        console.groupEnd();
+                        throw new Error(errorData.detail || 'An error occurred');
+                    }
+
+                    console.group('Success Response');
+                    console.log('Parsing response data...');
+                    // First try to get the raw text to log it
+                    const responseText = await response.clone().text();
+                    console.log('Raw response text:', responseText);
+                    
+                    // Then parse as JSON
+                    const data = await response.json();
+                    console.log('Parsed response data:', data);
+                    console.groupEnd();
+                    displayResults(data);
+                } catch (error) {
+                    console.group('Request Error');
+                    console.error('Error details:', error);
+                    console.error('Error name:', error.name);
+                    console.error('Error message:', error.message);
+                    if (error.name === 'AbortError') {
+                        console.error('Request timed out after 30 seconds');
+                        showError('Request timed out. Please check server connectivity and try again.');
+                    } else {
+                        showError(error.message || 'An unknown error occurred');
+                    }
+                    console.groupEnd();
+                } finally {
+                    loadingDiv.style.display = 'none';
+                }
+            });
+
+            function displayResults(data) {
+                // Display answer
+                answerOutput.textContent = data.answer;
+
+                // Display SQL
+                sqlOutput.textContent = data.sql;
+
+                // Handle results
+                if (data.rows && data.rows.length > 0) {
+                    // Show table, hide download
+                    tableContainer.innerHTML = createTable(data.rows);
+                    downloadContainer.style.display = 'none';
+                } else if (data.download_url) {
+                    // Show download link, hide table
+                    tableContainer.innerHTML = '';
+                    downloadContainer.style.display = 'block';
+                    downloadLink.href = data.download_url;
+                } else {
+                    // No results
+                    tableContainer.innerHTML = '<p>No results found.</p>';
+                    downloadContainer.style.display = 'none';
+                }
+
+                // Show output section
+                outputSection.style.display = 'block';
+            }
+
+            function createTable(rows) {
+                if (!rows || rows.length === 0) {
+                    return '<p>No results found.</p>';
+                }
+
+                const headers = Object.keys(rows[0]);
+                let tableHtml = '<table><thead><tr>';
+                
+                // Add headers
+                headers.forEach(header => {
+                    tableHtml += `<th>${header}</th>`;
+                });
+                tableHtml += '</tr></thead><tbody>';
+                
+                // Add rows
+                rows.forEach(row => {
+                    tableHtml += '<tr>';
+                    headers.forEach(header => {
+                        tableHtml += `<td>${row[header] !== null ? row[header] : ''}</td>`;
+                    });
+                    tableHtml += '</tr>';
+                });
+                
+                tableHtml += '</tbody></table>';
+                return tableHtml;
+            }
+
+            function showError(message) {
+                errorContainer.textContent = message;
+                errorContainer.style.display = 'block';
+                loadingDiv.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

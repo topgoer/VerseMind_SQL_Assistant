@@ -1,0 +1,7 @@
+vehicle_id,vin,fleet_id,model,make,variant,registration_no,purchase_date
+1,GBM6296G,1,SRM T3,SRM,T3,GBM6296G,2024-05-01
+2,GBM6297J,1,SRM T3,SRM,T3,GBM6297J,2024-06-01
+3,BXD1234A,1,Yutong E12,Yutong,E12,BXD1234A,2023-09-15
+4,LDN8888,2,Optare Metrodecker,Optare,Metrodecker,LDN8888,2023-01-10
+5,LDN7777,2,Optare Solo SR,Optare,Solo SR,LDN7777,2023-07-12
+6,LDN9999,2,BYD ADL Enviro200EV,BYD ADL,Enviro200EV,LDN9999,2024-02-20

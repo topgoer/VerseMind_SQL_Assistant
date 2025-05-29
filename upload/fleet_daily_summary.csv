@@ -1,0 +1,5 @@
+fleet_id,date,total_distance_km,total_energy_kwh,active_vehicles,avg_soc_pct
+1,2025-05-13,350,280,3,55
+1,2025-05-14,320,260,3,60
+2,2025-05-13,410,350,3,58
+2,2025-05-14,390,330,3,62

@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Virtual Environment
+venv/
+ENV/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Frontend
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.pnpm-debug.log
+frontend/dist/
+frontend/build/
+
+# Database
+*.sqlite3
+*.db
+upload/  # Database seed files directory
+
+# Temporary files
+temp/
+tmp/
+.DS_Store
+
+# Generated files
+static/*.csv
+static/downloads/
+
+# Logs
+logs/
+*.log
+
+public.pem
+private.pem

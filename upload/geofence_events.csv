@@ -1,0 +1,4 @@
+event_id,vehicle_id,geofence_name,enter_ts,exit_ts
+1,1,Depot,2025-05-14T06:00:00,2025-05-14T07:00:00
+2,4,CityCenter,2025-05-14T04:00:00,2025-05-14T04:30:00
+3,5,Airport,2025-05-13T11:00:00,2025-05-13T12:00:00
