@@ -31,7 +31,8 @@ from sql_assistant.services.llm_provider import (
     check_llm_api_keys, try_llm_provider, handle_llm_failures
 )
 from sql_assistant.services.db_operations import (
-    handle_column_error, extract_bad_column
+    handle_column_error,
+    extract_bad_column
 )
 
 # Database connection
@@ -46,6 +47,26 @@ engine = create_async_engine(DATABASE_URL)
 # Static directory for CSV downloads
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
+
+# Define constants for column references
+TRIPS_DISTANCE_KM = "trips.distance_km"
+
+COLUMN_CORRECTIONS = {
+    "trips.energy": "trips.energy_kwh",     # Common simplification of energy_kwh
+    "energy_consumed": "energy_kwh",        # Common incorrect reference
+    "energy_usage": "energy_kwh",           # Common incorrect reference
+    "vehicle.id": "vehicles.vehicle_id",    # Common incorrect reference
+    "trip.id": "trips.trip_id",             # Common incorrect reference
+    "driver.id": "drivers.driver_id",       # Common incorrect reference
+    "trips.driver_id": "drivers.driver_id", # Incorrect join reference
+    "trip_distance": TRIPS_DISTANCE_KM,       # Common incorrect reference
+    "distance": TRIPS_DISTANCE_KM,            # Common simplified reference
+    "idle_min": "trips.idle_minutes",       # Common simplification
+    "duration": "trips.end_ts - trips.start_ts", # Common duration calculation
+    "registration": "vehicles.registration_no", # Common simplification
+    "temp_c": "trips.avg_temp_c",           # Common simplification
+    "trip_date": "trips.start_ts::date"     # Common date extraction
+}
 
 # Function moved to llm_provider.py
 
@@ -253,24 +274,6 @@ TABLE_COLUMNS = {
     "geofence_events": ["event_id", "vehicle_id", "geofence_name", "enter_ts", "exit_ts"],
     "fleet_daily_summary": ["fleet_id", "date", "total_distance_km", "total_energy_kwh", "active_vehicles", "avg_soc_pct"],
     "driver_trip_map": ["trip_id", "driver_id", "primary_bool"]
-}
-
-# Dictionary mapping incorrect column references to correct ones
-COLUMN_CORRECTIONS = {
-    "trips.energy": "trips.energy_kwh",     # Common simplification of energy_kwh
-    "energy_consumed": "energy_kwh",        # Common incorrect reference
-    "energy_usage": "energy_kwh",           # Common incorrect reference
-    "vehicle.id": "vehicles.vehicle_id",    # Common incorrect reference
-    "trip.id": "trips.trip_id",             # Common incorrect reference
-    "driver.id": "drivers.driver_id",       # Common incorrect reference
-    "trips.driver_id": "drivers.driver_id", # Incorrect join reference
-    "trip_distance": "trips.distance_km",   # Common incorrect reference
-    "distance": "trips.distance_km",        # Common simplified reference
-    "idle_min": "trips.idle_minutes",       # Common simplification
-    "duration": "trips.end_ts - trips.start_ts", # Common duration calculation
-    "registration": "vehicles.registration_no", # Common simplification
-    "temp_c": "trips.avg_temp_c",           # Common simplification
-    "trip_date": "trips.start_ts::date"     # Common date extraction
 }
 
 def _create_openai_system_prompt() -> str:
@@ -587,27 +590,29 @@ async def sql_exec(sql: str, fleet_id: int) -> Dict[str, Any]:
     print(f"sql_exec called with SQL: {sql[:100]}... and fleet_id: {fleet_id}")
     
     try:
-        # Use database operations helper functions
         async with engine.connect() as conn:
-            # Set up database session
             await setup_database_session(conn, fleet_id)
-            
-            # Execute query and handle rows
+
             from sql_assistant.services.db_operations import execute_sql_query
             rows, error = await execute_sql_query(conn, sql, {"fleet_id": fleet_id})
-            
-            # Handle errors
+
             if error:
+                if "column \"fleet_id\" does not exist" in error:
+                    print("Detected error due to non-existent column 'fleet_id'. Correcting query...")
+                    corrected_sql = sql.replace(
+                        "AND fleet_id = :fleet_id",
+                        ""
+                    )
+                    print(f"Corrected SQL: {corrected_sql}")
+                    return await execute_sql_query(conn, corrected_sql, {})
                 return await handle_sql_error(error, sql)
-            
-            # Handle large results
+
             if len(rows) > 100:
                 from sql_assistant.services.db_operations import handle_large_result
                 return handle_large_result(rows)
             else:
-                # Return rows directly
                 return {"rows": rows}
-                
+
     except Exception as e:
         error_message = f"Error executing SQL: {str(e)}"
         print(error_message)
