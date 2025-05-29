@@ -512,6 +512,8 @@ async def setup_row_level_security(conn):
 async def main():
     """Main function to set up the database."""
     database_url = await get_database_url()
+    # Fix DSN for asyncpg: replace 'postgresql+asyncpg://' with 'postgresql://'
+    database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
     conn = await asyncpg.connect(database_url)
     
     try:

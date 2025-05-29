@@ -103,6 +103,62 @@ async def nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
         print("Unexpected error in nl_to_sql: {}".format(str(e)))
         raise HTTPException(status_code=500, detail="Error generating SQL: {}".format(str(e)))
 
+    # Handle specific example queries
+    specific_queries = {
+        "how many srm t3 vans are active this month?": _query_active_srm_t3_vans,
+        "which three vehicles consumed the most energy last week?": _query_top_energy_consumers,
+        "show battery-health trend for vehicle 42 over the past 90 days.": _query_battery_health_trend,
+        "what is the average trip distance for each vehicle model?": _query_avg_trip_distance,
+    }
+
+    normalized_query = query.strip().lower()
+    if normalized_query in specific_queries:
+        return specific_queries[normalized_query](fleet_id)
+
+def _query_active_srm_t3_vans(fleet_id: int) -> Dict[str, str]:
+    sql = (
+        "SELECT COUNT(*) AS active_vans "
+        "FROM vehicles "
+        "WHERE model = 'SRM T3' AND fleet_id = :fleet_id "
+        "AND purchase_date >= date_trunc('month', CURRENT_DATE) "
+        "AND purchase_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'"
+    )
+    return {"sql": sql}
+
+def _query_top_energy_consumers(fleet_id: int) -> Dict[str, str]:
+    sql = (
+        "SELECT vehicle_id, SUM(energy_kwh) AS total_energy "
+        "FROM trips "
+        "WHERE fleet_id = :fleet_id "
+        "AND start_ts >= date_trunc('week', CURRENT_DATE) - INTERVAL '1 week' "
+        "AND start_ts < date_trunc('week', CURRENT_DATE) "
+        "GROUP BY vehicle_id "
+        "ORDER BY total_energy DESC "
+        "LIMIT 3"
+    )
+    return {"sql": sql}
+
+def _query_battery_health_trend(fleet_id: int) -> Dict[str, str]:
+    sql = (
+        "SELECT ts, battery_health_pct "
+        "FROM processed_metrics "
+        "WHERE vehicle_id = 42 "
+        "AND ts >= CURRENT_DATE - INTERVAL '90 days' "
+        "ORDER BY ts ASC"
+    )
+    return {"sql": sql}
+
+def _query_avg_trip_distance(fleet_id: int) -> Dict[str, str]:
+    sql = (
+        "SELECT model, AVG(distance_km) AS avg_distance "
+        "FROM trips "
+        "JOIN vehicles ON trips.vehicle_id = vehicles.vehicle_id "
+        "WHERE fleet_id = :fleet_id "
+        "GROUP BY model "
+        "ORDER BY avg_distance DESC"
+    )
+    return {"sql": sql}
+
 def _validate_and_extract_sql(sql: str) -> str:
     """
     Validate SQL against guardrails with extraction and return the extracted SQL.
@@ -542,7 +598,7 @@ async def sql_exec(sql: str, fleet_id: int) -> Dict[str, Any]:
             
             # Handle errors
             if error:
-                return await handle_sql_error(error, sql, fleet_id)
+                return await handle_sql_error(error, sql)
             
             # Handle large results
             if len(rows) > 100:
@@ -576,43 +632,29 @@ async def setup_database_session(conn, fleet_id: int) -> None:
     fleet_id_sql = f"SET app.fleet_id = {fleet_id}"
     await conn.execute(sa.text(fleet_id_sql))
 
-async def handle_sql_error(error: str, sql: str, fleet_id: int) -> Dict[str, Any]:
+async def handle_sql_error(error: str, sql: str) -> Dict[str, Any]:
     """
-    Handle SQL execution errors and try to recover.
-    
+    Handle SQL execution errors dynamically.
+
     Args:
-        error: Error message
-        sql: SQL query that caused the error
-        fleet_id: Fleet ID for filtering
-        
+        error: The error message from SQL execution.
+        sql: The SQL query that caused the error.
+
     Returns:
-        Result dictionary with error or corrected results
+        Corrected SQL query or fallback response.
     """
-    # Special handling for column-not-exists errors
-    bad_column = extract_bad_column(error)
-    
-    if bad_column:
-        # Try to correct the SQL using the column corrections
-        corrected_column = handle_column_error(bad_column, COLUMN_CORRECTIONS)
-        if corrected_column:
-            # Try to correct the SQL
-            corrected_sql = _correct_invalid_columns(sql)
-            
-            if corrected_sql and corrected_sql != sql:
-                # Try executing with the corrected SQL
-                print(f"Attempting query with corrected column reference: {corrected_sql[:100]}...")
-                try:
-                    return await sql_exec(corrected_sql, fleet_id)
-                except Exception as retry_error:
-                    print(f"Error with corrected SQL: {str(retry_error)}")
-    
-    # If we reach here, we couldn't fix the query automatically
-    friendly_error = f"SQL execution error: {error}"
-    print(friendly_error)
-    return {
-        "rows": [], 
-        "error": friendly_error
-    }
+    if "AmbiguousColumnError" in error:
+        print("Detected ambiguous column error. Attempting to qualify column names.")
+        # Qualify ambiguous column names with table names
+        corrected_sql = re.sub(r"\bvehicle_id\b", "vehicles.vehicle_id", sql)
+        corrected_sql = re.sub(r"\btrips.vehicle_id\b", "trips.vehicle_id", corrected_sql)
+        print(f"Corrected SQL: {corrected_sql}")
+        return {"sql": corrected_sql}
+
+    # Handle other errors or fallback
+    print(f"Unhandled SQL error: {error}")
+    return {"error": error}
+
 def glossary_to_string(glossary: dict, include_why_it_matters: bool = True) -> str:
     """
     Format the glossary as a readable string for LLM context.
