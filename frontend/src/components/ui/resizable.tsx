@@ -1,8 +1,8 @@
-import * as React from "react"
-import { GripVertical } from "lucide-react"
-import * as ResizablePrimitive from "react-resizable-panels"
+import * as React from "react";
+import { GripVertical } from "lucide-react";
+import * as ResizablePrimitive from "react-resizable-panels";
 
-import { cn } from "../../lib/utils"
+import { cn } from "../../lib/utils";
 
 const ResizablePanelGroup = React.forwardRef<
   React.ElementRef<typeof ResizablePrimitive.PanelGroup>,
@@ -16,8 +16,8 @@ const ResizablePanelGroup = React.forwardRef<
     )}
     {...props}
   />
-))
-ResizablePanelGroup.displayName = "ResizablePanelGroup"
+));
+ResizablePanelGroup.displayName = "ResizablePanelGroup";
 
 const ResizablePanel = React.forwardRef<
   React.ElementRef<typeof ResizablePrimitive.Panel>,
@@ -28,8 +28,8 @@ const ResizablePanel = React.forwardRef<
     className={cn("relative flex h-full w-full flex-col", className)}
     {...props}
   />
-))
-ResizablePanel.displayName = "ResizablePanel"
+));
+ResizablePanel.displayName = "ResizablePanel";
 
 const ResizableHandle = React.forwardRef<
   React.ElementRef<typeof ResizablePrimitive.PanelResizeHandle>,
@@ -51,7 +51,7 @@ const ResizableHandle = React.forwardRef<
       </div>
     )}
   </ResizablePrimitive.PanelResizeHandle>
-))
-ResizableHandle.displayName = "ResizableHandle"
+));
+ResizableHandle.displayName = "ResizableHandle";
 
-export { ResizablePanelGroup, ResizablePanel, ResizableHandle }
+export { ResizablePanelGroup, ResizablePanel, ResizableHandle };
