@@ -30,10 +30,6 @@ from sql_assistant.services.sql_correction import (
 from sql_assistant.services.llm_provider import (
     check_llm_api_keys, try_llm_provider, handle_llm_failures
 )
-from sql_assistant.services.db_operations import (
-    handle_column_error,
-    extract_bad_column
-)
 
 # Database connection
 DB_USER = os.environ.get("DB_USER", "postgres")
