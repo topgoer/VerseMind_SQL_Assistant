@@ -11,10 +11,6 @@ import jwt
 from sql_assistant.main import app
 from sql_assistant.auth import get_fleet_id
 
-# For RLS tests, we need to ensure no authentication overrides are active
-# We'll need to patch the actual authentication functions
-from unittest.mock import patch, MagicMock
-
 # Test client
 client = TestClient(app)
 

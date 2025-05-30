@@ -10,7 +10,7 @@ import os
 import json
 import re
 import httpx
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Optional, Tuple, Any
 import yaml
 
 import anthropic

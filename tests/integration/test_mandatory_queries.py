@@ -9,7 +9,6 @@ from unittest.mock import patch
 import jwt
 
 from sql_assistant.main import app
-from sql_assistant.services.pipeline import semantic_mappings
 from sql_assistant.auth import get_fleet_id
 
 # Mock authentication for tests

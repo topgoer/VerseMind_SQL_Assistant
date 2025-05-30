@@ -2,7 +2,7 @@ import * as React from "react";
 import { GripVertical } from "lucide-react";
 import * as ResizablePrimitive from "react-resizable-panels";
 
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 
 const ResizablePanelGroup = React.forwardRef<
   React.ElementRef<typeof ResizablePrimitive.PanelGroup>,
