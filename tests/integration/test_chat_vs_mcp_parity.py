@@ -13,7 +13,7 @@ from sql_assistant.main import app
 from sql_assistant.services.pipeline import semantic_mappings
 from sql_assistant.auth import get_fleet_id
 
-# Mock authentication for tests
+# Mock authentication for these tests
 app.dependency_overrides[get_fleet_id] = lambda: 1
 
 # Test client
@@ -33,20 +33,16 @@ async def test_chat_vs_mcp_parity():
     # Enable MCP for testing
     with patch('sql_assistant.main.ENABLE_MCP', True):
         # Mock the process_query function to avoid actual database calls
-        with patch('sql_assistant.main.process_query') as mock_process:
-            # Also mock the individual steps to make MCP work correctly
-            with patch('sql_assistant.main.nl_to_sql') as mock_nl_to_sql, \
-                 patch('sql_assistant.main.sql_exec') as mock_sql_exec, \
-                 patch('sql_assistant.main.answer_format') as mock_answer_format:
-                
-                # Set up mock return values
-                mock_process.return_value = ("Test answer", "SELECT * FROM test", [{"count": 5}], None, False)
-                mock_nl_to_sql.return_value = {"sql": "SELECT * FROM test"}
-                mock_sql_exec.return_value = {"rows": [{"count": 5}]}
-                mock_answer_format.return_value = "Test answer"
-                
-                # Need to verify that nl_to_sql is called with the semantic_mappings parameter
-                mock_nl_to_sql.assert_not_called()  # Reset any previous calls
+        with patch('sql_assistant.main.process_query') as mock_process, \
+             patch('sql_assistant.main.nl_to_sql') as mock_nl_to_sql, \
+             patch('sql_assistant.main.sql_exec') as mock_sql_exec, \
+             patch('sql_assistant.main.answer_format') as mock_answer_format:
+            
+            # Set up mock return values
+            mock_process.return_value = ("Test answer", "SELECT * FROM test", [{"count": 5}], None, False)
+            mock_nl_to_sql.return_value = {"sql": "SELECT * FROM test"}
+            mock_sql_exec.return_value = {"rows": [{"count": 5}]}
+            mock_answer_format.return_value = "Test answer"
             
             # Test /chat endpoint
             chat_response = client.post(

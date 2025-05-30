@@ -9,6 +9,12 @@ from unittest.mock import patch
 import jwt
 
 from sql_assistant.main import app
+from sql_assistant.auth import get_fleet_id
+
+# For RLS tests, we specifically avoid mocking authentication
+# so we can test the actual authentication logic
+if get_fleet_id in app.dependency_overrides:
+    del app.dependency_overrides[get_fleet_id]
 
 # Test client
 client = TestClient(app)
