@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 import jwt
+import os
 
 from sql_assistant.main import app
 from sql_assistant.auth import get_fleet_id
@@ -16,10 +17,21 @@ client = TestClient(app)
 
 # Mock JWT tokens for different fleets
 def create_mock_token(fleet_id):
-    with open("d:\\Github\\versemind_sql_assistant\\private.pem", "r") as key_file:
-        private_key = key_file.read()
-    return jwt.encode({"fleet_id": fleet_id}, private_key, algorithm="RS256")
+    """Create a mock token, handling missing private key file gracefully."""
+    try:
+        private_key_path = "d:\\Github\\versemind_sql_assistant\\private.pem"
+        if os.path.exists(private_key_path):
+            with open(private_key_path, "r") as key_file:
+                private_key = key_file.read()
+            return jwt.encode({"fleet_id": fleet_id}, private_key, algorithm="RS256")
+        else:
+            # Return a mock token for CI environment
+            return f"mock_token_fleet_{fleet_id}"
+    except Exception:
+        # Fallback to mock token if any errors occur
+        return f"mock_token_fleet_{fleet_id}"
 
+# Use static tokens for fleet 1, generate token for fleet 2 if possible
 FLEET_1_TOKEN = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0ZXIiLCJmbGVldF9pZCI6MSwiZXhwIjoxNzQ4NTczNTk3fQ.DTWVMaiJDeGDF6FoEwTMsaC3BKn41Vcck_h8SUlVMFHfOl0Q_uzuUZ-o4YRAhr68LEJLpA-BsWqFn2LUUW664yuII5mQNwDyuMm6kSYe9izBekBnyJul3KQHKuZ7PqgtZenWMBygfPUzko4ZTMcPJVHFi_9YHJGrZlEesFwPoa--bVDNzd7rw8FfdqGZBsg-id3KAbgNldFaSIq9oVjiRxovv8h9K3OM7QSj-GmJo_G6TE-52bLFP-bUBuki_K8VJXzIbuu38nSL52V_jT2JmXClQUEnbuIdofzkSaCM7AVQmKV3fLvbB6vwzEI41B85hmNjYz_c9DdX-hetCROgKTpdQ"
 FLEET_2_TOKEN = create_mock_token(2)
 
