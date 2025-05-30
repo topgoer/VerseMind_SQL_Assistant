@@ -6,7 +6,6 @@ This module provides common test fixtures and configuration for both unit and in
 import os
 import pytest
 import asyncio
-from typing import AsyncGenerator
 import asyncpg
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker

@@ -7,7 +7,6 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 import jwt
-import os
 
 from sql_assistant.main import app
 from sql_assistant.auth import get_fleet_id
