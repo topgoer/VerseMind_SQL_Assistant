@@ -35,21 +35,27 @@ async def execute_sql_query(conn, sql: str, params: Dict[str, Any]) -> Tuple[Lis
             sa.text(sql),
             params
         )
-        
+
         # Fetch all rows - handle potential mapping errors
         rows = []
         try:
             rows = [dict(row) for row in result.mappings()]
         except Exception as mapping_error:
             print(f"Error mapping rows: {str(mapping_error)}")
+            # Log the type and structure of result for debugging
+            print(f"Result type: {type(result)}")
+            print(f"Result content: {result}")
             # Try alternative approach
             try:
-                rows = [dict(zip(result.keys(), row)) for row in result.fetchall()]
+                if hasattr(result, 'keys') and callable(result.keys):
+                    rows = [dict(zip(result.keys(), row)) for row in result.fetchall()]
+                else:
+                    raise ValueError("Result object does not support 'keys' method")
             except Exception as fetch_error:
                 print(f"Error fetching rows: {str(fetch_error)}")
                 # Last resort: return empty rows with error
                 return [], f"Error processing results: {str(fetch_error)}"
-        
+
         return rows, None
     except Exception as query_error:
         print(f"Query execution error: {str(query_error)}")

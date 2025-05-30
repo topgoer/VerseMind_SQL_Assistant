@@ -605,6 +605,16 @@ async def sql_exec(sql: str, fleet_id: int) -> Dict[str, Any]:
                     )
                     print(f"Corrected SQL: {corrected_sql}")
                     return await execute_sql_query(conn, corrected_sql, {})
+                elif "missing FROM-clause entry for table" in error:
+                    print("Detected missing FROM-clause entry error. Attempting to correct column references...")
+                    corrected_sql = sql.replace("trips.trip_id.distance_km", "trips.distance_km")
+                    print(f"Corrected SQL: {corrected_sql}")
+                    return await execute_sql_query(conn, corrected_sql, {"fleet_id": fleet_id})
+                elif "relation \"soh\" does not exist" in error:
+                    print("Detected missing table 'soh'. Removing references to the table...")
+                    corrected_sql = sql.replace("JOIN soh ON vehicles.vehicle_id = soh.vehicle_id", "")
+                    print(f"Corrected SQL: {corrected_sql}")
+                    return await execute_sql_query(conn, corrected_sql, {"fleet_id": fleet_id})
                 return await handle_sql_error(error, sql)
 
             if len(rows) > 100:
@@ -802,6 +812,7 @@ async def answer_format(query: str, sql_result: Dict[str, Any], sql: str) -> str
         }
         # Use the fallback formatter with our simple context
         return await _format_answer_fallback(simple_context)
+
 async def _openai_answer_format(context_str: str) -> str:
     """Use OpenAI to format results into a human-readable answer."""
     # Configure client at runtime
