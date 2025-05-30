@@ -32,17 +32,22 @@ async def test_chat_vs_mcp_parity():
     """Test that /chat and /mcp endpoints return identical answers for the same query."""
     # Enable MCP for testing
     with patch('sql_assistant.main.ENABLE_MCP', True):
-        # Mock the process_query function to avoid actual database calls
+        # Mock all the necessary functions
         with patch('sql_assistant.main.process_query') as mock_process, \
              patch('sql_assistant.main.nl_to_sql') as mock_nl_to_sql, \
              patch('sql_assistant.main.sql_exec') as mock_sql_exec, \
              patch('sql_assistant.main.answer_format') as mock_answer_format:
             
-            # Set up mock return values
-            mock_process.return_value = ("Test answer", "SELECT * FROM test", [{"count": 5}], None, False)
-            mock_nl_to_sql.return_value = {"sql": "SELECT * FROM test"}
-            mock_sql_exec.return_value = {"rows": [{"count": 5}]}
-            mock_answer_format.return_value = "Test answer"
+            # Set consistent mock return values for both endpoints
+            test_sql = "SELECT * FROM test"
+            test_data = [{"count": 5}]
+            test_answer = "Test answer"
+            
+            # Configure mocks with proper return values
+            mock_process.return_value = (test_answer, test_sql, test_data, None, False)
+            mock_nl_to_sql.return_value = {"sql": test_sql}
+            mock_sql_exec.return_value = {"rows": test_data}
+            mock_answer_format.return_value = test_answer
             
             # Test /chat endpoint
             chat_response = client.post(
