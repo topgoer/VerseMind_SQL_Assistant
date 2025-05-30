@@ -106,7 +106,11 @@ async def test_query_with_time_filter():
     # Mock the nl_to_sql function to check SQL generation
     with patch('sql_assistant.main.nl_to_sql') as mock_nl_to_sql, \
          patch('sql_assistant.main.sql_exec') as mock_sql_exec, \
-         patch('sql_assistant.main.answer_format') as mock_answer_format:
+         patch('sql_assistant.main.answer_format') as mock_answer_format, \
+         patch('sql_assistant.services.pipeline.check_llm_api_keys') as mock_check_keys:
+        
+        # Mock the API key check to avoid LLM calls
+        mock_check_keys.return_value = ("dummy_key", None, None)
         
         # Set up mock return values
         mock_nl_to_sql.return_value = {"sql": "SELECT vehicle_id, SUM(energy_kwh) as total_energy FROM trips WHERE start_ts >= '2025-05-17' AND start_ts <= '2025-05-24' AND fleet_id = :fleet_id GROUP BY vehicle_id ORDER BY total_energy DESC LIMIT 3"}
