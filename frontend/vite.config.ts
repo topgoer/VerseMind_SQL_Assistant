@@ -11,6 +11,11 @@ export default defineConfig({
       'src': path.resolve(__dirname, './src'),
     },
   },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/setupTests.ts'],
+  },
   build: {
     sourcemap: true,
     rollupOptions: {
