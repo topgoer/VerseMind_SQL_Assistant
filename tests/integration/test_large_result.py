@@ -31,8 +31,12 @@ MOCK_TOKEN = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0ZXIiLCJmbGVld
 @pytest.mark.timeout(10)  # Ensure test completes within 10 seconds
 async def test_large_result_path():
     """Test that queries returning >100 rows provide a download_url and create the file."""
-    # Mock the process_query function directly to avoid DB access issues
-    with patch('sql_assistant.main.process_query') as mock_process:
+    # Mock the process_query function directly to avoid DB access issues and LLM providers
+    with patch('sql_assistant.main.process_query') as mock_process, \
+         patch('sql_assistant.services.pipeline.check_llm_api_keys') as mock_check_keys:
+        
+        # Mock the API key check to avoid LLM calls
+        mock_check_keys.return_value = ("dummy_key", None, None)
         
         # Generate a unique filename for testing
         test_filename = f"{uuid.uuid4()}.csv"
@@ -89,8 +93,13 @@ async def test_large_result_path():
 @pytest.mark.timeout(10)  # Ensure test completes within 10 seconds
 async def test_small_result_path():
     """Test that queries returning ≤100 rows provide rows directly and not download_url."""
-    # Mock the process_query function to return a small result set
-    with patch('sql_assistant.main.process_query') as mock_process:
+    # Mock the process_query function to return a small result set and LLM providers
+    with patch('sql_assistant.main.process_query') as mock_process, \
+         patch('sql_assistant.services.pipeline.check_llm_api_keys') as mock_check_keys:
+        
+        # Mock the API key check to avoid LLM calls
+        mock_check_keys.return_value = ("dummy_key", None, None)
+        
         # Set up mock return values for a small result set
         mock_rows = [{"id": i, "value": f"test{i}"} for i in range(10)]
         mock_process.return_value = ("Test answer", "SELECT * FROM test LIMIT 10", mock_rows, None, False)

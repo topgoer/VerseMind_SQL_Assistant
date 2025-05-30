@@ -363,27 +363,30 @@ async def handle_mcp_request(
     
     return envelope
 
-# Conditionally add MCP endpoint if enabled
-if ENABLE_MCP:
-    @app.post("/mcp")
-    async def mcp_endpoint(
-        envelope: MCPEnvelope,
-        fleet_id: int = Depends(get_fleet_id)
-    ):
-        """
-        Process a request through the Model Context Protocol.
+# Always register MCP endpoint, but conditionally handle it
+@app.post("/mcp")
+async def mcp_endpoint(
+    envelope: MCPEnvelope,
+    fleet_id: int = Depends(get_fleet_id)
+):
+    """
+    Process a request through the Model Context Protocol.
+    
+    Args:
+        envelope: MCP envelope with trace_id, context, and steps
+        fleet_id: Fleet ID from JWT token
         
-        Args:
-            envelope: MCP envelope with trace_id, context, and steps
-            fleet_id: Fleet ID from JWT token
-            
-        Returns:
-            Updated MCP envelope with step outputs
-        """
-        try:
-            return await handle_mcp_request(envelope, fleet_id)
-        except HTTPException:
-            # Re-raise HTTP exceptions without modification
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+    Returns:
+        Updated MCP envelope with step outputs
+    """
+    # Check if MCP is enabled at runtime
+    if not ENABLE_MCP:
+        raise HTTPException(status_code=404, detail="MCP endpoint is not enabled")
+    
+    try:
+        return await handle_mcp_request(envelope, fleet_id)
+    except HTTPException:
+        # Re-raise HTTP exceptions without modification
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

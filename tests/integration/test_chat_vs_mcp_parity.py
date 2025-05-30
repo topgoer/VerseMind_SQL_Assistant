@@ -31,11 +31,15 @@ async def test_chat_vs_mcp_parity():
     """Test that /chat and /mcp endpoints return identical answers for the same query."""
     # Enable MCP for testing
     with patch('sql_assistant.main.ENABLE_MCP', True):
-        # Mock all the necessary functions
+        # Mock all the necessary functions, including LLM providers
         with patch('sql_assistant.main.process_query') as mock_process, \
              patch('sql_assistant.main.nl_to_sql') as mock_nl_to_sql, \
              patch('sql_assistant.main.sql_exec') as mock_sql_exec, \
-             patch('sql_assistant.main.answer_format') as mock_answer_format:
+             patch('sql_assistant.main.answer_format') as mock_answer_format, \
+             patch('sql_assistant.services.pipeline.check_llm_api_keys') as mock_check_keys:
+            
+            # Mock the API key check to avoid LLM calls
+            mock_check_keys.return_value = ("dummy_key", None, None)
             
             # Set consistent mock return values for both endpoints
             test_sql = "SELECT * FROM test"
@@ -91,10 +95,14 @@ async def test_mcp_partial_steps():
     """Test that /mcp endpoint can handle partial steps."""
     # Enable MCP for testing
     with patch('sql_assistant.main.ENABLE_MCP', True):
-        # Mock individual pipeline functions
+        # Mock individual pipeline functions and LLM providers
         with patch('sql_assistant.main.nl_to_sql') as mock_nl_to_sql, \
              patch('sql_assistant.main.sql_exec') as mock_sql_exec, \
-             patch('sql_assistant.main.answer_format') as mock_answer_format:
+             patch('sql_assistant.main.answer_format') as mock_answer_format, \
+             patch('sql_assistant.services.pipeline.check_llm_api_keys') as mock_check_keys:
+            
+            # Mock the API key check to avoid LLM calls
+            mock_check_keys.return_value = ("dummy_key", None, None)
             
             # Set up mock return values
             mock_nl_to_sql.return_value = {"sql": "SELECT * FROM test"}
@@ -160,5 +168,4 @@ async def test_mcp_disabled():
         )
         
         # Should return 404 Not Found when MCP is disabled
-        # Update the expectation based on actual app behavior (it's returning 200)
-        assert response.status_code == 200
+        assert response.status_code == 404

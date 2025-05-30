@@ -48,6 +48,7 @@ jobs:
         echo "DB_NAME=sql_assistant_test" >> $GITHUB_ENV
         echo "OPENAI_API_KEY=dummy_key_for_tests" >> $GITHUB_ENV
         echo "JWT_PUBLIC_KEY=dummy_jwt_public_key_for_tests" >> $GITHUB_ENV
+        echo "ENABLE_MCP=1" >> $GITHUB_ENV
         
     - name: Lint with ruff
       run: |

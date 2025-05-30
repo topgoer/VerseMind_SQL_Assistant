@@ -40,8 +40,13 @@ MANDATORY_QUERIES = [
 @pytest.mark.timeout(10)  # Ensure test completes within 10 seconds
 async def test_mandatory_queries():
     """Test that the system can handle all mandatory business questions."""
-    # Mock the process_query function to avoid actual database calls
-    with patch('sql_assistant.main.process_query') as mock_process:
+    # Mock the process_query function and LLM providers to avoid actual database and API calls
+    with patch('sql_assistant.main.process_query') as mock_process, \
+         patch('sql_assistant.services.pipeline.check_llm_api_keys') as mock_check_keys:
+        
+        # Mock the API key check to avoid LLM calls
+        mock_check_keys.return_value = ("dummy_key", None, None)
+        
         # Set up mock return values
         mock_process.return_value = ("Test answer", "SELECT * FROM test", [{"count": 5}], None, False)
         
@@ -67,10 +72,14 @@ async def test_mandatory_queries():
 @pytest.mark.asyncio
 async def test_query_with_model_filter():
     """Test query filtering by vehicle model."""
-    # Mock the nl_to_sql function to check SQL generation
+    # Mock the nl_to_sql function to check SQL generation and LLM providers
     with patch('sql_assistant.main.nl_to_sql') as mock_nl_to_sql, \
          patch('sql_assistant.main.sql_exec') as mock_sql_exec, \
-         patch('sql_assistant.main.answer_format') as mock_answer_format:
+         patch('sql_assistant.main.answer_format') as mock_answer_format, \
+         patch('sql_assistant.services.pipeline.check_llm_api_keys') as mock_check_keys:
+        
+        # Mock the API key check to avoid LLM calls
+        mock_check_keys.return_value = ("dummy_key", None, None)
         
         # Set up mock return values
         mock_nl_to_sql.return_value = {"sql": "SELECT COUNT(*) FROM vehicles WHERE model = 'SRM T3' AND fleet_id = :fleet_id LIMIT 5000"}
