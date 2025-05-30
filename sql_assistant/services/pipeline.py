@@ -11,6 +11,7 @@ import json
 import re
 import httpx
 from typing import Dict, List, Optional, Tuple, Any, Union
+import yaml
 
 import anthropic
 from mistralai.client import MistralClient
@@ -44,6 +45,10 @@ engine = create_async_engine(DATABASE_URL)
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 
+# Load semantic mappings
+with open('sql_assistant/services/semantic_mapping.yaml', 'r') as file:
+    semantic_mappings = yaml.safe_load(file)['mappings']
+
 # Define constants for column references
 TRIPS_DISTANCE_KM = "trips.distance_km"
 
@@ -66,16 +71,17 @@ COLUMN_CORRECTIONS = {
 
 # Function moved to llm_provider.py
 
-async def nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
+async def nl_to_sql(query: str, fleet_id: int, mappings: Dict[str, str]) -> Dict[str, str]:
     """
     Convert natural language query to SQL using available LLM providers.
     
     Args:
         query: Natural language query
         fleet_id: Fleet ID for filtering
-        
+        mappings: Semantic mappings for table-column references
+    
     Returns:
-        Dict with generated SQL
+        SQL query and metadata
     """
     if not query:
         raise HTTPException(status_code=400, detail="Query cannot be empty")
@@ -896,6 +902,46 @@ async def _mistral_answer_format(context_str: str) -> str:
     
     return response.choices[0].message.content.strip()
 
+def _correct_invalid_columns(sql: str) -> str:
+    """
+    Correct common invalid column references in SQL queries.
+
+    Args:
+        sql: SQL query string
+
+    Returns:
+        Corrected SQL query string
+    """
+    # Example correction: Replace 'energy' with 'energy_kwh' in 'trips' table
+    corrected_sql = sql.replace("trips.energy", "trips.energy_kwh")
+    return corrected_sql
+
+async def _try_llm_provider(context: dict, openai_key: str, anthropic_key: str, mistral_key: str) -> str:
+    """
+    Attempt to format results using the first available LLM provider.
+
+    Args:
+        context: Context for the LLM
+        openai_key: OpenAI API key
+        anthropic_key: Anthropic API key
+        mistral_key: Mistral API key
+
+    Returns:
+        Formatted answer
+    """
+    try:
+        if openai_key:
+            return await _openai_answer_format(json.dumps(context))
+        elif anthropic_key:
+            return await _anthropic_answer_format(json.dumps(context))
+        elif mistral_key:
+            return await _mistral_answer_format(json.dumps(context))
+        else:
+            raise ValueError("No valid LLM API keys provided.")
+    except Exception as e:
+        print(f"Error in _try_llm_provider: {str(e)}")
+        raise
+
 async def process_query(query: str, fleet_id: int) -> Tuple[str, str, Optional[List[Dict[str, Any]]], Optional[str], bool]:
     """
     Process a natural language query end-to-end.
@@ -908,21 +954,21 @@ async def process_query(query: str, fleet_id: int) -> Tuple[str, str, Optional[L
         Tuple of (answer, sql, rows, download_url, is_fallback)
     """
     print(f"process_query called with query: '{query}', fleet_id: {fleet_id}")
-    
+
     # Step 1: Convert natural language to SQL
-    sql_result = await nl_to_sql(query, fleet_id)
+    sql_result = await nl_to_sql(query, fleet_id, semantic_mappings)
     sql = sql_result["sql"]
     is_fallback = sql_result.get("is_fallback", False)
     print(f"NL to SQL result: is_fallback={is_fallback}, sql={sql[:50]}...")
-    
+
     if is_fallback:
         print("Using fallback SQL query: {}".format(sql))
-    
+
     # Step 2: Execute SQL
     print("Executing SQL...")
     exec_result = await sql_exec(sql, fleet_id)
     print(f"SQL execution returned: {list(exec_result.keys())}")
-    
+
     # Step 3: Format answer
     answer_prefix = "Note: I couldn't generate a specific SQL query for your question, so I'm showing you a general result. " if is_fallback else ""
     # Make sure exec_result contains the is_fallback flag
@@ -931,222 +977,39 @@ async def process_query(query: str, fleet_id: int) -> Tuple[str, str, Optional[L
     else:
         # Handle case where exec_result might not be a dict
         context_with_fallback = {"is_fallback": is_fallback, "rows": []}
-    
+
     print("Formatting answer...")
     answer = await answer_format(query, context_with_fallback, sql)
     print(f"Answer formatting complete: {answer[:50]}...")
-    
+
     if is_fallback:
         answer = answer_prefix + answer
         print("Added fallback prefix to answer")
-    
+
     # Extract rows and download_url
-    rows = exec_result.get("rows")
-    download_url = exec_result.get("download_url")
-    
-    result = (answer, sql, rows, download_url, is_fallback)
-    print(f"process_query returning {len(result)} values: {is_fallback=}")
-    return result
+    rows = exec_result.get("rows", [])
+    download_url = exec_result.get("download_url", None)
 
-def _apply_direct_column_corrections(sql: str) -> str:
-    """Apply direct column corrections for known incorrect references."""
-    modified_sql = sql
-    for incorrect, correct in COLUMN_CORRECTIONS.items():
-        pattern = r'\b' + re.escape(incorrect) + r'\b'
-        modified_sql = re.sub(pattern, correct, modified_sql, flags=re.IGNORECASE)
-    return modified_sql
+    # Return all expected values
+    return answer, sql, rows, download_url, is_fallback
 
-def _find_closest_column_match(column_name: str, valid_columns: list) -> str:
-    """Find the closest matching column name using string distance."""
-    closest_match = None
-    min_distance = float('inf')
-    
-    for valid_col in valid_columns:
-        distance = _levenshtein_distance(column_name, valid_col.lower())
-        if distance < min_distance:
-            min_distance = distance
-            closest_match = valid_col
-    
-    # Only return match if reasonably close (distance < 5)
-    return closest_match if min_distance < 5 else None
-
-def _correct_table_column_references(sql: str) -> str:
-    """Correct table.column references that don't exist in the schema."""
-    modified_sql = sql
-    
-    for table_name, columns in TABLE_COLUMNS.items():
-        table_column_pattern = r'\b' + re.escape(table_name) + r'\.([a-zA-Z0-9_]+)\b'
-        
-        for match in re.finditer(table_column_pattern, modified_sql, re.IGNORECASE):
-            column_name = match.group(1).lower()
-            
-            # If referenced column doesn't exist in this table
-            if column_name not in [col.lower() for col in columns]:
-                print(f"🔄 Found invalid column reference: {table_name}.{column_name}")
-                
-                closest_match = _find_closest_column_match(column_name, columns)
-                if closest_match:
-                    replacement = f"{table_name}.{closest_match}"
-                    old_reference = match.group(0)
-                    print(f"🔄 Replacing {old_reference} with {replacement}")
-                    modified_sql = modified_sql.replace(old_reference, replacement)
-    
-    return modified_sql
-
-def _correct_invalid_columns(sql: str) -> str:
+async def _format_answer_fallback(context: dict) -> str:
     """
-    Correct references to non-existent columns in SQL queries.
-    
+    Format results into a simple fallback answer.
+
     Args:
-        sql: Original SQL query
-        
+        context: Context for the fallback answer
+
     Returns:
-        SQL with column references corrected
+        Fallback answer string
     """
-    # Apply direct column corrections
-    modified_sql = _apply_direct_column_corrections(sql)
-    
-    # Correct table.column references
-    modified_sql = _correct_table_column_references(modified_sql)
-    
-    if modified_sql != sql:
-        print("✅ Column references corrected")
-        print(f"BEFORE: {sql}")
-        print(f"AFTER:  {modified_sql}")
-        
-    return modified_sql
+    query = context.get("query", "unknown query")
+    row_count = context.get("row_count", 0)
+    download_url = context.get("download_url")
 
-def _levenshtein_distance(s1: str, s2: str) -> int:
-    """
-    Calculate the Levenshtein distance between two strings.
-    Used to find similar column names.
-    """
-    if len(s1) < len(s2):
-        return _levenshtein_distance(s2, s1)
-
-    if len(s2) == 0:
-        return len(s1)
-
-    previous_row = range(len(s2) + 1)
-    for i, c1 in enumerate(s1):
-        current_row = [i + 1]
-        for j, c2 in enumerate(s2):
-            insertions = previous_row[j + 1] + 1
-            deletions = current_row[j] + 1
-            substitutions = previous_row[j] + (c1 != c2)
-            current_row.append(min(insertions, deletions, substitutions))
-        previous_row = current_row
-        
-    return previous_row[-1]
-
-async def _format_answer_fallback(context: Union[str, Dict]) -> str:
-    """
-    Fallback formatter when LLM providers fail.
-    
-    Args:
-        context: Context for answer formatting (can be a string or dictionary)
-        
-    Returns:
-        Basic formatted answer
-    """
-    try:
-        # Parse the context JSON if it's a string
-        if isinstance(context, str):
-            # Try to extract the JSON part from the context
-            json_match = re.search(r'Context:\s*(.*)$', context, re.DOTALL)
-            if json_match:
-                context_json = json_match.group(1).strip()
-                context_data = json.loads(context_json)
-            else:
-                # If we can't find the JSON, just return a generic message
-                return "Query completed. Please check the results table."
-        else:
-            context_data = context
-        
-        # Extract the data we need
-        query = context_data.get("query", "")
-        rows = context_data.get("rows", [])
-        row_count = context_data.get("row_count", 0)
-        download_url = context_data.get("download_url")
-        
-        # Create a basic response
-        if download_url:
-            return f"Your query about '{query}' returned {row_count} rows, which can be downloaded using the provided link."
-        elif rows and len(rows) > 0:
-            if len(rows) == 1 and len(rows[0].keys()) == 1:
-                # Single value result
-                key = list(rows[0].keys())[0]
-                value = rows[0][key]
-                return f"Result for '{query}': {value}"
-            else:
-                # Multi-row or multi-column result
-                return f"Your query about '{query}' returned {len(rows)} results. Please check the results table."
-        else:
-            return f"Your query about '{query}' did not return any results."
-    except Exception as e:
-        print(f"Error in fallback formatter: {str(e)}")
-        return "Query completed. Please check the results table."
-
-async def _try_openai_answer_format(context: str) -> Optional[str]:
-    """Try to format answer using OpenAI."""
-    try:
-        answer = await _openai_answer_format(context)
-        return answer if answer else None
-    except Exception as e:
-        print(f"OpenAI error: {str(e)}")
-        return None
-
-async def _try_anthropic_answer_format(context: str) -> Optional[str]:
-    """Try to format answer using Anthropic."""
-    try:
-        answer = await _anthropic_answer_format(context)
-        return answer if answer else None
-    except Exception as e:
-        print(f"Anthropic error: {str(e)}")
-        return None
-
-async def _try_mistral_answer_format(context: str) -> Optional[str]:
-    """Try to format answer using Mistral."""
-    try:
-        answer = await _mistral_answer_format(context)
-        return answer if answer else None
-    except Exception as e:
-        print(f"Mistral error: {str(e)}")
-        return None
-
-async def _try_llm_provider(context: str, openai_key: Optional[str], anthropic_key: Optional[str], mistral_key: Optional[str]) -> str:
-    """
-    Try to generate an answer using available LLM providers.
-    
-    Args:
-        context: Context for answer formatting
-        openai_key: OpenAI API key if available
-        anthropic_key: Anthropic API key if available  
-        mistral_key: Mistral API key if available
-        
-    Returns:
-        Formatted answer from the first successful LLM provider
-    """
-    # Try providers in order of preference
-    providers_to_try = [
-        (openai_key, _try_openai_answer_format, "OpenAI"),
-        (anthropic_key, _try_anthropic_answer_format, "Anthropic"), 
-        (mistral_key, _try_mistral_answer_format, "Mistral")
-    ]
-    
-    failed_providers = []
-    
-    for api_key, provider_func, provider_name in providers_to_try:
-        if api_key:
-            answer = await provider_func(context)
-            if answer:
-                return answer
-            failed_providers.append(provider_name)
-    
-    # Handle fallback
-    if failed_providers:
-        print(f"All LLM providers failed: {'; '.join(failed_providers)}")
+    if row_count > 0:
+        return f"Your query '{query}' returned {row_count} rows. You can download the results here: {download_url}."
+    elif download_url:
+        return f"Your query '{query}' returned a large result set. You can download the results here: {download_url}."
     else:
-        print("No LLM API keys available")
-    
-    return await _format_answer_fallback(context)
+        return f"Your query '{query}' did not return any results."

@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from sql_assistant.auth import get_fleet_id, FleetMiddleware
 from sql_assistant.schemas.responses import ChatResponse
 from sql_assistant.schemas.mcp import MCPEnvelope, Step
-from sql_assistant.services.pipeline import process_query, nl_to_sql, sql_exec, answer_format
+from sql_assistant.services.pipeline import process_query, nl_to_sql, sql_exec, answer_format, semantic_mappings
 
 # Get absolute path to static directory
 STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -142,7 +142,7 @@ async def process_nl_to_sql_step(step: Step, query: str, fleet_id: int, envelope
         envelope: MCP envelope containing the step
     """
     try:
-        step.output = await nl_to_sql(query, fleet_id)
+        step.output = await nl_to_sql(query, fleet_id, semantic_mappings)
     except Exception as e:
         # Provide helpful context about the error
         raise HTTPException(

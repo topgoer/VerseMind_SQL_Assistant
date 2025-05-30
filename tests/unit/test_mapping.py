@@ -15,7 +15,7 @@ async def test_vehicle_synonyms():
         mock_nl_to_sql.return_value = {"sql": "SELECT * FROM vehicles WHERE fleet_id = :fleet_id LIMIT 100"}
         
         # Import here to avoid module-level import errors
-        from sql_assistant.services.pipeline import nl_to_sql
+        from sql_assistant.services.pipeline import nl_to_sql, semantic_mappings
         
         synonyms = [
             "vehicle", "vehicles", "van", "vans", "car", "cars", 
@@ -24,10 +24,10 @@ async def test_vehicle_synonyms():
         
         for synonym in synonyms:
             query = f"How many {synonym} do we have?"
-            await nl_to_sql(query, fleet_id=1)
+            await nl_to_sql(query, fleet_id=1, mappings=semantic_mappings)
             
             # Check that nl_to_sql was called with the correct arguments
-            mock_nl_to_sql.assert_called_with(query, fleet_id=1)
+            mock_nl_to_sql.assert_called_with(query, fleet_id=1, mappings=semantic_mappings)
 
 @pytest.mark.asyncio
 async def test_model_synonyms():
@@ -38,7 +38,7 @@ async def test_model_synonyms():
         mock_nl_to_sql.return_value = {"sql": "SELECT * FROM vehicles WHERE model = 'SRM T3' AND fleet_id = :fleet_id LIMIT 100"}
         
         # Import here to avoid module-level import errors
-        from sql_assistant.services.pipeline import nl_to_sql
+        from sql_assistant.services.pipeline import nl_to_sql, semantic_mappings
         
         queries = [
             "How many SRM T3 vans are active?",
@@ -49,10 +49,10 @@ async def test_model_synonyms():
         ]
         
         for query in queries:
-            await nl_to_sql(query, fleet_id=1)
+            await nl_to_sql(query, fleet_id=1, mappings=semantic_mappings)
             
             # Check that nl_to_sql was called with the correct arguments
-            mock_nl_to_sql.assert_called_with(query, fleet_id=1)
+            mock_nl_to_sql.assert_called_with(query, fleet_id=1, mappings=semantic_mappings)
 
 @pytest.mark.asyncio
 async def test_time_period_synonyms():
@@ -63,7 +63,7 @@ async def test_time_period_synonyms():
         mock_nl_to_sql.return_value = {"sql": "SELECT * FROM trips WHERE date >= '2025-01-01' AND fleet_id = :fleet_id LIMIT 100"}
         
         # Import here to avoid module-level import errors
-        from sql_assistant.services.pipeline import nl_to_sql
+        from sql_assistant.services.pipeline import nl_to_sql, semantic_mappings
         
         time_periods = [
             "today", "yesterday", "this week", "last week",
@@ -73,10 +73,10 @@ async def test_time_period_synonyms():
         
         for period in time_periods:
             query = f"How many trips were completed {period}?"
-            await nl_to_sql(query, fleet_id=1)
+            await nl_to_sql(query, fleet_id=1, mappings=semantic_mappings)
             
             # Check that nl_to_sql was called with the correct arguments
-            mock_nl_to_sql.assert_called_with(query, fleet_id=1)
+            mock_nl_to_sql.assert_called_with(query, fleet_id=1, mappings=semantic_mappings)
 
 @pytest.mark.asyncio
 async def test_metric_synonyms():
@@ -87,7 +87,7 @@ async def test_metric_synonyms():
         mock_nl_to_sql.return_value = {"sql": "SELECT AVG(distance_km) FROM trips WHERE fleet_id = :fleet_id GROUP BY vehicle_id LIMIT 100"}
         
         # Import here to avoid module-level import errors
-        from sql_assistant.services.pipeline import nl_to_sql
+        from sql_assistant.services.pipeline import nl_to_sql, semantic_mappings
         
         metric_pairs = [
             ("distance", "distance_km"),
@@ -104,7 +104,7 @@ async def test_metric_synonyms():
         
         for natural_term, db_term in metric_pairs:
             query = f"What is the average {natural_term} for each vehicle?"
-            await nl_to_sql(query, fleet_id=1)
+            await nl_to_sql(query, fleet_id=1, mappings=semantic_mappings)
             
             # Check that nl_to_sql was called with the correct arguments
-            mock_nl_to_sql.assert_called_with(query, fleet_id=1)
+            mock_nl_to_sql.assert_called_with(query, fleet_id=1, mappings=semantic_mappings)

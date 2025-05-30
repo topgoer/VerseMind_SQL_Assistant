@@ -55,9 +55,16 @@ jobs:
       run: |
         python db/import_data.py
         
-    - name: Run integration tests
+    - name: Generate JWT Token
       run: |
-        PYTHONPATH=. pytest tests/integration/ --cov=sql_assistant --cov-append --cov-report=xml
+        pwsh -Command "& { ./gen_jwt.ps1 -FleetId 1 | Out-File jwt_token.txt }"
+        echo "JWT_TOKEN=$(cat jwt_token.txt)" >> $GITHUB_ENV
+
+    - name: Run integration tests
+      env:
+        JWT_TOKEN: ${{ env.JWT_TOKEN }}
+      run: |
+        pytest tests/integration/ --cov=sql_assistant --cov-report=xml
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3

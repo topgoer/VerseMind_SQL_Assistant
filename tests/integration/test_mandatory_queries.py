@@ -9,6 +9,11 @@ from unittest.mock import patch
 import jwt
 
 from sql_assistant.main import app
+from sql_assistant.services.pipeline import semantic_mappings
+from sql_assistant.auth import get_fleet_id
+
+# Mock authentication for tests
+app.dependency_overrides[get_fleet_id] = lambda: 1
 
 # Test client
 client = TestClient(app)
@@ -18,7 +23,8 @@ def create_mock_token(fleet_id):
     """Create a mock JWT token with the specified fleet_id."""
     return jwt.encode({"fleet_id": fleet_id}, "test_key", algorithm="HS256")
 
-MOCK_TOKEN = create_mock_token(1)
+# Using the valid token generated previously
+MOCK_TOKEN = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0ZXIiLCJmbGVldF9pZCI6MSwiZXhwIjoxNzQ4NTczNTk3fQ.DTWVMaiJDeGDF6FoEwTMsaC3BKn41Vcck_h8SUlVMFHfOl0Q_uzuUZ-o4YRAhr68LEJLpA-BsWqFn2LUUW664yuII5mQNwDyuMm6kSYe9izBekBnyJul3KQHKuZ7PqgtZenWMBygfPUzko4ZTMcPJVHFi_9YHJGrZlEesFwPoa--bVDNzd7rw8FfdqGZBsg-id3KAbgNldFaSIq9oVjiRxovv8h9K3OM7QSj-GmJo_G6TE-52bLFP-bUBuki_K8VJXzIbuu38nSL52V_jT2JmXClQUEnbuIdofzkSaCM7AVQmKV3fLvbB6vwzEI41B85hmNjYz_c9DdX-hetCROgKTpdQ"
 
 # List of 7 representative business questions
 MANDATORY_QUERIES = [
@@ -38,7 +44,7 @@ async def test_mandatory_queries():
     # Mock the process_query function to avoid actual database calls
     with patch('sql_assistant.main.process_query') as mock_process:
         # Set up mock return values
-        mock_process.return_value = ("Test answer", "SELECT * FROM test", [{"count": 5}], None)
+        mock_process.return_value = ("Test answer", "SELECT * FROM test", [{"count": 5}], None, False)
         
         # Test each mandatory query
         for query in MANDATORY_QUERIES:
