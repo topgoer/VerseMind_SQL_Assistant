@@ -7,6 +7,21 @@ import { buttonVariants } from "@/components/ui/button";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>
 
+// Props for the custom Chevron component, matching DayPicker's expected signature
+interface CalendarChevronComponentProps {
+  className?: string;
+  size?: number; // Included as DayPicker might pass it, though lucide-react icons might not use it directly
+  disabled?: boolean;
+  orientation?: "left" | "right" | "up" | "down"; // DayPicker uses this broader set for orientation
+}
+
+// Define the component to return JSX.Element (which is compatible with DayPicker's `Element` expectation)
+const CalendarChevron = ({ orientation, className, ...props }: CalendarChevronComponentProps): JSX.Element => {
+  // Default to ChevronLeft if orientation is not 'right' (handles 'left', 'up', 'down', or undefined)
+  const Icon = orientation === "right" ? ChevronRight : ChevronLeft;
+  return <Icon className={cn("h-4 w-4", className)} {...props} />;
+};
+
 function Calendar({
   className,
   classNames,
@@ -58,10 +73,7 @@ function Calendar({
         ...classNames,
       }}
       components={{
-        Chevron: ({ orientation, className, ...props }) => {
-          const Icon = orientation === "left" ? ChevronLeft : ChevronRight;
-          return <Icon className={cn("h-4 w-4", className)} {...props} />;
-        },
+        Chevron: CalendarChevron, // Pass the refactored component
       }}
       {...props}
     />

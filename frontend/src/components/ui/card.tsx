@@ -30,17 +30,19 @@ const CardHeader = React.forwardRef<
 CardHeader.displayName = "CardHeader";
 
 const CardTitle = React.forwardRef<
-  HTMLParagraphElement,
+  HTMLHeadingElement, // Corrected: Should be HTMLHeadingElement for an <h3>
   React.HTMLAttributes<HTMLHeadingElement>
->(({ className, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => ( // Destructure children
   <h3
     ref={ref}
     className={cn(
       "text-2xl font-semibold leading-none tracking-tight",
       className
     )}
-    {...props}
-  />
+    {...props} // Spread other props
+  >
+    {children} {/* Explicitly render children */}
+  </h3>
 ));
 CardTitle.displayName = "CardTitle";
 
