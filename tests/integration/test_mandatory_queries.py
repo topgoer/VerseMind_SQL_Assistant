@@ -72,18 +72,18 @@ async def test_mandatory_queries():
 @pytest.mark.asyncio
 async def test_query_with_model_filter():
     """Test query filtering by vehicle model."""
-    # Mock nl_to_sql where it's looked up (in main.py) to prevent actual LLM calls
-    with patch('sql_assistant.main.nl_to_sql') as mock_main_nl_to_sql, \
-         patch('sql_assistant.main.sql_exec') as mock_sql_exec, \
-         patch('sql_assistant.main.answer_format') as mock_answer_format, \
+    # Mock functions where they are looked up by the code under test (pipeline.py)
+    with patch('sql_assistant.services.pipeline.nl_to_sql') as mock_pipeline_nl_to_sql, \
+         patch('sql_assistant.services.pipeline.sql_exec') as mock_pipeline_sql_exec, \
+         patch('sql_assistant.services.pipeline.answer_format') as mock_pipeline_answer_format, \
          patch('sql_assistant.services.pipeline.check_llm_api_keys') as mock_check_keys: # Safety net
         
         mock_check_keys.return_value = ("dummy_key", None, None)
         
-        # Set up mock return values for main.nl_to_sql
-        mock_main_nl_to_sql.return_value = {"sql": "SELECT COUNT(*) FROM vehicles WHERE model = 'SRM T3' AND fleet_id = :fleet_id LIMIT 5000"}
-        mock_sql_exec.return_value = {"rows": [{"count": 5}]}
-        mock_answer_format.return_value = "You have 5 SRM T3 vans in your fleet."
+        # Set up mock return values
+        mock_pipeline_nl_to_sql.return_value = {"sql": "SELECT COUNT(*) FROM vehicles WHERE model = 'SRM T3' AND fleet_id = :fleet_id LIMIT 5000"}
+        mock_pipeline_sql_exec.return_value = {"rows": [{"count": 5}]}
+        mock_pipeline_answer_format.return_value = "You have 5 SRM T3 vans in your fleet."
         
         # Test query
         response = client.post(
@@ -102,18 +102,18 @@ async def test_query_with_model_filter():
 @pytest.mark.asyncio
 async def test_query_with_time_filter():
     """Test query filtering by time period."""
-    # Mock nl_to_sql where it's looked up (in main.py)
-    with patch('sql_assistant.main.nl_to_sql') as mock_main_nl_to_sql, \
-         patch('sql_assistant.main.sql_exec') as mock_sql_exec, \
-         patch('sql_assistant.main.answer_format') as mock_answer_format, \
+    # Mock functions where they are looked up by the code under test (pipeline.py)
+    with patch('sql_assistant.services.pipeline.nl_to_sql') as mock_pipeline_nl_to_sql, \
+         patch('sql_assistant.services.pipeline.sql_exec') as mock_pipeline_sql_exec, \
+         patch('sql_assistant.services.pipeline.answer_format') as mock_pipeline_answer_format, \
          patch('sql_assistant.services.pipeline.check_llm_api_keys') as mock_check_keys: # Safety net
         
         mock_check_keys.return_value = ("dummy_key", None, None)
         
-        # Set up mock return values for main.nl_to_sql
-        mock_main_nl_to_sql.return_value = {"sql": "SELECT vehicle_id, SUM(energy_kwh) as total_energy FROM trips WHERE start_ts >= '2025-05-17' AND start_ts <= '2025-05-24' AND fleet_id = :fleet_id GROUP BY vehicle_id ORDER BY total_energy DESC LIMIT 3"}
-        mock_sql_exec.return_value = {"rows": [{"vehicle_id": 1, "total_energy": 100}, {"vehicle_id": 2, "total_energy": 90}, {"vehicle_id": 3, "total_energy": 80}]}
-        mock_answer_format.return_value = "The three vehicles with highest energy consumption last week were vehicle 1 (100 kWh), vehicle 2 (90 kWh), and vehicle 3 (80 kWh)."
+        # Set up mock return values
+        mock_pipeline_nl_to_sql.return_value = {"sql": "SELECT vehicle_id, SUM(energy_kwh) as total_energy FROM trips WHERE start_ts >= '2025-05-17' AND start_ts <= '2025-05-24' AND fleet_id = :fleet_id GROUP BY vehicle_id ORDER BY total_energy DESC LIMIT 3"}
+        mock_pipeline_sql_exec.return_value = {"rows": [{"vehicle_id": 1, "total_energy": 100}, {"vehicle_id": 2, "total_energy": 90}, {"vehicle_id": 3, "total_energy": 80}]}
+        mock_pipeline_answer_format.return_value = "The three vehicles with highest energy consumption last week were vehicle 1 (100 kWh), vehicle 2 (90 kWh), and vehicle 3 (80 kWh)."
         
         # Test query
         response = client.post(
