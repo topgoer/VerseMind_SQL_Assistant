@@ -20,6 +20,7 @@ A natural language analytics layer for fleet operators with dual interface suppo
 
 - Docker and Docker Compose v2+ (the project uses modern Compose features)
 - OpenAI API key (or Anthropic/Mistral as fallbacks)
+- Python 3.12+ (for local development)
 
 ### Installation
 
@@ -57,12 +58,25 @@ docker compose up -d
 
 5. Generate authentication keys and JWT token:
 
-```bash
-# Generate public.pem, private.pem and a JWT token for fleet_id=1
-python scripts/gen_keys_and_jwt.py 
+For Windows:
+```powershell
+# Generate for fleet_id=1 (default)
+.\gen_jwt.ps1
 
-# You can specify a different fleet_id
-# python scripts/gen_keys_and_jwt.py 2
+# Or specify a different fleet_id
+.\gen_jwt.ps1 2
+```
+
+For Linux/MacOS:
+```bash
+# Make the script executable (first time only)
+chmod +x gen_jwt.sh
+
+# Generate for fleet_id=1 (default)
+./gen_jwt.sh
+
+# Or specify a different fleet_id
+./gen_jwt.sh 2
 ```
 
    This script creates public.pem and private.pem files in the project root, which are used for JWT authentication. 
@@ -104,84 +118,22 @@ You should see messages like "Imported X rows into [table_name]" for each CSV fi
 If you need to update your API key or other environment variables:
 1. Edit the `.env` file with your new values
 2. Run the included script to recreate containers with fresh environment variables:
+
+For Windows:
+```powershell
+.\rebuild_and_test.ps1
+```
+
+For Linux/MacOS:
 ```bash
-./restart_docker_with_env.ps1  # On Windows
-# or
-bash restart_docker_with_env.sh  # On Linux/Mac (if available)
-```
-This script completely recreates containers to ensure they use the latest environment variables.
+# Make the script executable (first time only)
+chmod +x rebuild_and_test.sh
 
-## API Endpoints
-
-### Chat Endpoint
-
-```
-POST /chat
+# Run the script
+./rebuild_and_test.sh
 ```
 
-Request body:
-```json
-{
-  "query": "How many vehicles are in the fleet?",
-  "fleet_id": 1
-}
-```
-
-Response:
-```json
-{
-  "answer": "There are 42 vehicles in fleet 1.",
-  "sql": "SELECT COUNT(*) FROM vehicles WHERE fleet_id = :fleet_id LIMIT 5000",
-  "rows": [{"count": 42}],
-  "download_url": null
-}
-```
-
-### MCP Endpoint
-
-```
-POST /mcp
-```
-
-Request body:
-```json
-{
-  "query": "How many vehicles are in the fleet?",
-  "fleet_id": 1,
-  "tools": ["nl_to_sql", "sql_exec", "answer_format"]
-}
-```
-
-Response:
-```json
-{
-  "trace": [
-    {
-      "tool": "nl_to_sql",
-      "input": {"query": "How many vehicles are in the fleet?", "fleet_id": 1},
-      "output": {"sql": "SELECT COUNT(*) FROM vehicles WHERE fleet_id = :fleet_id LIMIT 5000"}
-    },
-    {
-      "tool": "sql_exec",
-      "input": {"sql": "SELECT COUNT(*) FROM vehicles WHERE fleet_id = :fleet_id LIMIT 5000", "fleet_id": 1},
-      "output": {"rows": [{"count": 42}]}
-    },
-    {
-      "tool": "answer_format",
-      "input": {
-        "query": "How many vehicles are in the fleet?",
-        "sql_result": {"rows": [{"count": 42}]},
-        "sql": "SELECT COUNT(*) FROM vehicles WHERE fleet_id = :fleet_id LIMIT 5000"
-      },
-      "output": "There are 42 vehicles in fleet 1."
-    }
-  ],
-  "answer": "There are 42 vehicles in fleet 1.",
-  "sql": "SELECT COUNT(*) FROM vehicles WHERE fleet_id = :fleet_id LIMIT 5000",
-  "rows": [{"count": 42}],
-  "download_url": null
-}
-```
+This script completely recreates containers to ensure they use the latest environment variables and runs the test suite.
 
 ## Development
 
@@ -189,9 +141,16 @@ Response:
 
 1. Create a virtual environment:
 
+For Windows:
+```powershell
+python -m venv venv
+.\venv\Scripts\activate
+```
+
+For Linux/MacOS:
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 ```
 
 2. Install dependencies:
@@ -251,21 +210,37 @@ The output will be in the `dist/` directory.
 
 ### Running Tests
 
-```bash
-# Run unit tests
-pytest tests/unit/
-
-# Run integration tests
-pytest tests/integration/
+For Windows:
+```powershell
+# Run all tests
+pytest
 
 # Run with coverage
-pytest --cov=sql_assistant tests/
+pytest --cov=sql_assistant --cov-report=xml
 ```
 
-### Test Requirements
+For Linux/MacOS:
+```bash
+# Run all tests
+PYTHONPATH=. pytest
 
-- Unit tests require at least one LLM API key set in the environment
-- Integration tests require a running PostgreSQL database
+# Run with coverage
+PYTHONPATH=. pytest --cov=sql_assistant --cov-report=xml
+```
+
+## API Documentation
+
+### Chat Endpoint
+
+```
+POST /chat
+```
+
+### MCP Endpoint
+
+```
+POST /mcp
+```
 
 ## Project Structure
 
@@ -273,25 +248,15 @@ pytest --cov=sql_assistant tests/
 sql_assistant/
 ├── .github/                    # GitHub configuration files
 │   └── workflows/             # CI/CD workflows
+├── .ruff_cache/               # Ruff linter cache
+├── .pytest_cache/             # Pytest cache
 ├── db/                        # Database related files
+│   ├── import_data.py        # Data import and RLS setup (IMPORTANT)
+│   └── RLS_SETUP.sql         # Row-Level Security configuration
+├── docs/                      # Documentation files
 ├── examples/                  # Example code and usage
 │   └── call_mcp.py           # MCP client example
-├── scripts/                   # Utility scripts
-├── static/                    # Static assets
-│   ├── chat.html             # Web-based chat interface
-│   └── screenshot.png        # Project screenshot
-├── temp/                      # Temporary files
-├── tests/                     # Test suite
-│   ├── integration/          # Integration tests
-│   └── unit/                 # Unit tests
-├── sql_assistant/            # Main application code
-│   ├── services/             # Business logic services
-│   ├── schemas/              # Data models and schemas
-│   ├── main.py              # FastAPI application entry point
-│   ├── guardrails.py        # Query validation and safety checks
-│   ├── auth.py              # Authentication and authorization
-│   └── __init__.py          # Package initialization
-├── frontend/                 # React SPA frontend
+├── frontend/                  # React SPA frontend
 │   ├── public/               # Static assets
 │   ├── src/                  # Source code
 │   │   ├── components/       # React components
@@ -299,85 +264,92 @@ sql_assistant/
 │   │   └── styles/           # CSS styles
 │   ├── package.json         # NPM dependencies
 │   └── vite.config.ts       # Vite configuration
+├── scripts/                   # Utility scripts
+│   ├── gen_keys_and_jwt.py  # JWT key generation
+│   └── make_dummy_jwt.py    # JWT token generation
+├── sql_assistant/            # Main application code
+│   ├── services/             # Business logic services
+│   │   └── domain_glossary.py # Domain-specific terms
+│   ├── schemas/              # Data models and schemas
+│   ├── main.py              # FastAPI application entry point
+│   ├── guardrails.py        # Query validation and safety checks
+│   ├── auth.py              # Authentication and authorization
+│   └── __init__.py          # Package initialization
+├── static/                    # Static assets
+│   ├── chat.html             # Web-based chat interface
+│   └── screenshot.png        # Project screenshot
+├── tests/                     # Test suite
+│   ├── integration/          # Integration tests
+│   └── unit/                 # Unit tests
+├── upload/                    # Data import directory
 ├── .env.example              # Example environment variables
-├── docker-compose.yml        # Docker Compose configuration
-├── Dockerfile               # Docker build instructions
-├── README.md                # Project documentation
-└── requirements.txt         # Python dependencies
+├── .gitignore                # Git ignore rules
+├── CHANGELOG.md              # Version history
+├── Dockerfile                # Docker build instructions
+├── LICENSE                   # MIT License
+├── README.md                 # Project documentation
+├── TESTING_SUMMARY.md        # Test coverage and results
+├── docker-compose.test.yml   # Test environment configuration
+├── docker-compose.yml        # Docker services configuration
+├── gen_jwt.ps1              # Windows JWT generation script
+├── gen_jwt.sh               # Linux/MacOS JWT generation script
+├── package-lock.json         # NPM lock file
+├── package.json              # NPM package configuration
+├── pytest.ini               # Pytest configuration
+├── rebuild_and_test.ps1     # Windows rebuild and test script
+├── rebuild_and_test.sh      # Linux/MacOS rebuild and test script
+├── requirements.txt          # Python dependencies
+└── setup.py                 # Python package configuration
 ```
 
-## Security
+## Important Files
 
-- All SQL queries are validated to ensure they:
-  - Include a fleet_id filter for tenant isolation
-  - Have a LIMIT clause (max 5000 rows)
-  - Contain no SQL comments
-  - Use only SELECT statements (no modifications)
-- JWT authentication ensures users can only access their own fleet data
-- Row-Level Security (RLS) enforces data isolation at the database level
+### Configuration Files
+- `.env.example` - Template for environment variables
+- `docker-compose.yml` - Docker services configuration
+- `Dockerfile` - Container build instructions
+- `requirements.txt` - Python dependencies
+- `frontend/package.json` - Frontend dependencies
 
-## JWT Token Generation for Testing
+### Database and Data Files
+- `db/import_data.py` - Core data import functionality and RLS setup
+  - Handles CSV data import with automatic schema detection
+  - Sets up Row-Level Security (RLS) policies
+  - Supports multi-tenant data isolation
+- `db/RLS_SETUP.sql` - Row-Level Security configuration
+- `upload/` - Directory for your CSV data files
+  - Place your CSV files here for import
+  - Files should follow the expected schema for each table
 
-To test authenticated endpoints, you need a valid JWT token and a matching public key file.
+### Platform-Specific Scripts
+For Windows:
+- `rebuild_and_test.ps1` - Rebuild containers and run tests
+- `gen_jwt.ps1` - Generate JWT tokens and keys
 
-### Generate Keys and Token in One Step
+For Linux/MacOS:
+- `rebuild_and_test.sh` - Rebuild containers and run tests
+- `gen_jwt.sh` - Generate JWT tokens and keys
 
-Use the provided script to generate a key pair and JWT token in one step:
+### Authentication Files
+- `public.pem` - Public key for JWT verification (generated by scripts)
+- `private.pem` - Private key for JWT signing (generated by scripts)
 
-```bash
-# Generate for fleet_id=1 (default)
-python scripts/gen_keys_and_jwt.py
+### Core Application Files
+- `sql_assistant/main.py` - FastAPI application entry point
+- `sql_assistant/auth.py` - Authentication and authorization
+- `sql_assistant/guardrails.py` - Query validation and safety checks
+- `frontend/src/App.tsx` - Main React application component
 
-# Or specify a different fleet_id
-python scripts/gen_keys_and_jwt.py 2
-```
+### Test Files
+- `tests/unit/` - Unit tests
+- `tests/integration/` - Integration tests
+- `pytest.ini` - Test configuration
+- `docker-compose.test.yml` - Test environment configuration
 
-This script:
-- Creates `private.pem` and `public.pem` in the project root
-- Automatically generates a JWT token for the specified fleet ID
-- Prints the token for immediate use with API requests
-
-### Alternative: Manual Generation
-
-If you prefer, you can still generate keys and tokens separately:
-
-1. Generate a key pair with OpenSSL:
-```bash
-openssl genrsa -out private.pem 2048
-openssl rsa -in private.pem -pubout -out public.pem
-```
-
-2. Use the make_dummy_jwt.py script:
-```bash
-python scripts/make_dummy_jwt.py --fleet 1 --private-key private.pem
-```
-
-- Replace `1` with your desired fleet ID
-- Replace `private.pem` with your private key path if different
-
-The script will output a JWT token you can use for API requests (e.g., as an Authorization header).
-
-## Domain Glossary Knowledge Base
-
-A domain-specific glossary is provided to help the LLM understand key terms and context in the EV/fleet management domain. This glossary is located at:
-
-- `sql_assistant/services/domain_glossary.py`
-
-It contains definitions and explanations for terms such as SOH (State of Health), SOC (State of Charge), SRM T3, VIN, Trip, Charging session, and more. The glossary is automatically injected into LLM prompts when generating human-readable answers, improving the accuracy and relevance of responses.
-
-**How it works:**
-- The glossary is formatted and prepended to the LLM context in the answer formatting pipeline.
-- This ensures that the LLM always has access to domain definitions and relationships when answering user queries.
-
-Feel free to update or expand the glossary as your data or use cases evolve.
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### Documentation
+- `README.md` - Project documentation
+- `CHANGELOG.md` - Version history
+- `TESTING_SUMMARY.md` - Test coverage and results
 
 ## License
 

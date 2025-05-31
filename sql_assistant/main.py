@@ -69,7 +69,10 @@ async def silence_health_check_logs(request: Request, call_next):
 # Mount static files directory
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
+def root():
+    return FileResponse("static/chat.html")
+
 @app.get("/chat.html")
 async def root():
     """Serve the chat interface."""

@@ -9,7 +9,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 
 def get_jwt_public_key():
-    with open("/app/public.pem", "r") as f:
+    # Use environment variable if set, otherwise default to project root
+    key_path = os.environ.get("JWT_PUBLIC_KEY_PATH", "public.pem")
+    with open(key_path, "r") as f:
         return f.read().replace('\r\n', '\n').replace('\r', '\n')
 
 security = HTTPBearer()
