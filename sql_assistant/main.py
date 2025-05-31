@@ -74,7 +74,7 @@ def root():
     return FileResponse("static/chat.html")
 
 @app.get("/chat.html")
-async def root():
+async def chat_html():
     """Serve the chat interface."""
     if not CHAT_HTML_PATH.exists():
         raise HTTPException(status_code=500, detail=f"Chat HTML file not found at {CHAT_HTML_PATH}")
