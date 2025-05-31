@@ -8,14 +8,9 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 
-# Read JWT_PUBLIC_KEY from file if not set
-if not os.environ.get("JWT_PUBLIC_KEY"):
-    try:
-        with open("/app/public.pem", "r") as f:
-            key = f.read().replace('\r\n', '\n').replace('\r', '\n')
-            os.environ["JWT_PUBLIC_KEY"] = key
-    except Exception as e:
-        print(f"Could not load JWT_PUBLIC_KEY from /app/public.pem: {e}")
+def get_jwt_public_key():
+    with open("/app/public.pem", "r") as f:
+        return f.read().replace('\r\n', '\n').replace('\r', '\n')
 
 security = HTTPBearer()
 
@@ -49,7 +44,7 @@ async def get_fleet_id(
         # Decode JWT token using RS256 algorithm
         payload = jwt.decode(
             token,
-            os.environ.get("JWT_PUBLIC_KEY"),
+            get_jwt_public_key(),
             algorithms=["RS256"],
             options={"verify_aud": False}
         )

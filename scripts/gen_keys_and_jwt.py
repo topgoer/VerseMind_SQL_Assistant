@@ -130,6 +130,20 @@ def restart_docker_container():
         print(f"Failed to restart Docker container: {e}")
         print("Please try manually restarting with: docker compose restart web")
 
+def keys_match(public_key_path="public.pem", private_key_path="private.pem"):
+    # Load public key
+    with open(public_key_path, "rb") as f:
+        public_pem = f.read()
+    public_key = serialization.load_pem_public_key(public_pem, backend=default_backend())
+
+    # Load private key
+    with open(private_key_path, "rb") as f:
+        private_pem = f.read()
+    private_key = serialization.load_pem_private_key(private_pem, password=None, backend=default_backend())
+
+    # Compare public numbers
+    return public_key.public_numbers() == private_key.public_key().public_numbers()
+
 # Main execution
 args = parse_args()
 fleet_id = args.fleet_id
@@ -159,6 +173,13 @@ if args.update_docker or keys_generated:
     except Exception as e:
         print(f"Couldn't check container status: {e}")
         restart_docker_container()  # Try anyway
+
+# Check key pair before generating JWT
+if not keys_match():
+    print("ERROR: public.pem and private.pem DO NOT match! JWT will not be valid.")
+    exit(1)
+else:
+    print("public.pem and private.pem match. Proceeding to generate JWT.")
 
 # Read private key for JWT
 with open(PRIVATE_KEY_FILE, "r") as f:
