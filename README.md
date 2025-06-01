@@ -1,6 +1,6 @@
 # VerseMind SQL Assistant
 
-[![CI](https://github.com/topgoer/versemind-sql-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/topgoer/versemind-sql-assistant/actions/workflows/ci.yml)
+[![CI](https://github.com/topgoer/VerseMind_SQL_Assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/topgoer/VerseMind_SQL_Assistant/actions/workflows/ci.yml)
 
 A natural language analytics layer for fleet operators with dual interface support for standard chat and Model Control Protocol (MCP).
 
