@@ -77,15 +77,8 @@ jobs:
         psql -h localhost -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'sql_assistant_test'" | grep -q 1 || psql -h localhost -U postgres -c "CREATE DATABASE sql_assistant_test"
         # Run test-specific database setup
         python tests/setup_test_db.py
-        
-    - name: Generate JWT Token
-      run: |
-        pwsh -Command "& { ./gen_jwt.ps1 -FleetId 1 | Out-File jwt_token.txt }"
-        echo "JWT_TOKEN=$(cat jwt_token.txt)" >> $GITHUB_ENV
 
     - name: Run integration tests
-      env:
-        JWT_TOKEN: ${{ env.JWT_TOKEN }}
       run: |
         PYTHONPATH=. pytest tests/integration/ --cov=sql_assistant --cov-report=xml
         
