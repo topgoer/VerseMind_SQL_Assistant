@@ -58,8 +58,7 @@ def handle_llm_failures(errors, empty_sql_errors, validate_and_extract_sql_fn):
     
     # Provide more specific error message if all LLMs returned empty SQL
     if empty_sql_errors == len(errors) and empty_sql_errors > 0:
-        print("All LLMs failed with empty SQL responses")
-        # Try to generate a default SQL response
+        print("All LLMs failed with empty SQL responses")        # Try to generate a default SQL response
         try:
             default_sql = "SELECT * FROM vehicles WHERE fleet_id = :fleet_id LIMIT 100"
             extracted_sql = validate_and_extract_sql_fn(default_sql)
@@ -71,7 +70,8 @@ def handle_llm_failures(errors, empty_sql_errors, validate_and_extract_sql_fn):
                 status_code=500,
                 detail="Could not generate SQL from your query. All LLM models returned empty responses. Please try reformulating your question."
             )
-    else:        raise HTTPException(
+    else:
+        raise HTTPException(
             status_code=500,
             detail="All LLMs failed to generate SQL. Errors: {}".format(error_summary)
         )
