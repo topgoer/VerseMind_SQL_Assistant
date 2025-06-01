@@ -73,8 +73,7 @@ def handle_llm_failures(errors, empty_sql_errors, validate_and_extract_sql_fn):
             )
     else:
         raise HTTPException(
-            status_code=500,
-            detail="All LLMs failed to generate SQL. Errors: {}".format(error_summary)
+            status_code=500,            detail="All LLMs failed to generate SQL. Errors: {}".format(error_summary)
         )
 
 async def _deepseek_nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
