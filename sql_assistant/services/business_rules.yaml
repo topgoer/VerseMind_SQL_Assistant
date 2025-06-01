@@ -1,0 +1,9 @@
+rules:
+  - Only use SELECT statements
+  - Always include WHERE fleet_id = :fleet_id
+  - Always include LIMIT 5000
+  - Do not use SQL comments
+  - Do not use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, or other DML/DDL
+  - Use only columns and tables defined in the schema. Do NOT invent or guess columns (e.g., 'last_active_date').
+  - If you need to determine if a vehicle is 'active this month', use the 'trips' table and filter by trips.start_ts within the current month. Do NOT use any column not present in the schema.
+  - Return only the SQL query, no explanations or formatting 

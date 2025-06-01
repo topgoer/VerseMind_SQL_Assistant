@@ -6,6 +6,10 @@ This module defines the FastAPI application, routes, and middleware.
 import os
 from typing import Dict
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from fastapi import FastAPI, Depends, HTTPException, Request, Body
 from fastapi.staticfiles import StaticFiles
@@ -111,22 +115,19 @@ async def chat(
         print(f"Chat endpoint received query: '{query}', fleet_id: {fleet_id}")
         
         # Process query end-to-end
-        print("Calling process_query...")
         result = await process_query(query, fleet_id)
-        print(f"process_query returned {len(result)} values: {result[:2]}...")
         
-        answer, sql, rows, download_url, is_fallback = result
-        print(f"Unpacked values - is_fallback: {is_fallback}")
-        
-        # Return response
+        # 直接用 dict 字段构造 ChatResponse
         response = ChatResponse(
-            answer=answer,
-            sql=sql,
-            rows=rows,
-            download_url=download_url,
-            is_fallback=is_fallback
+            answer=result["answer"],
+            sql=result["sql"],
+            rows=result["rows"],
+            download_url=result["download_url"],
+            is_fallback=result["is_fallback"],
+            prompt_sql=result.get("prompt_sql"),
+            prompt_answer=result.get("prompt_answer")
         )
-        print(f"Created ChatResponse with is_fallback={is_fallback}")
+        print(f"Created ChatResponse with is_fallback={result['is_fallback']}")
         return response
     
     except Exception as e:
@@ -145,7 +146,7 @@ async def process_nl_to_sql_step(step: Step, query: str, fleet_id: int, envelope
         envelope: MCP envelope containing the step
     """
     try:
-        step.output = await nl_to_sql(query, fleet_id, semantic_mappings)
+        step.output = await nl_to_sql(query, fleet_id)
     except Exception as e:
         # Provide helpful context about the error
         raise HTTPException(

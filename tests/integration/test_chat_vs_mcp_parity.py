@@ -47,7 +47,15 @@ async def test_chat_vs_mcp_parity():
             test_answer = "Test answer"
             
             # Configure mocks with proper return values
-            mock_process.return_value = (test_answer, test_sql, test_data, None, False)
+            mock_process.return_value = {
+                "answer": test_answer,
+                "sql": test_sql,
+                "rows": test_data,
+                "download_url": None,
+                "is_fallback": False,
+                "prompt_sql": "",
+                "prompt_answer": ""
+            }
             mock_nl_to_sql.return_value = {"sql": test_sql}
             mock_sql_exec.return_value = {"rows": test_data}
             mock_answer_format.return_value = test_answer

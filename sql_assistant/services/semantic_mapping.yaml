@@ -1,5 +1,6 @@
 # Semantic mapping file for user terms to table.column references
 mappings:
+  # --- Vehicle and Fleet ---
   vehicle_id: vehicles.vehicle_id
   vin: vehicles.vin
   fleet_id: vehicles.fleet_id
@@ -8,21 +9,45 @@ mappings:
   variant: vehicles.variant
   registration_no: vehicles.registration_no
   purchase_date: vehicles.purchase_date
+  # --- Trip/Journey ---
   trip_id: trips.trip_id
+  trip: trips.trip_id
+  trips: trips.trip_id
+  journey: trips.trip_id
+  journeys: trips.trip_id
   start_ts: trips.start_ts
   end_ts: trips.end_ts
   distance_km: trips.distance_km
+  trip distance: trips.distance_km
+  journey distance: trips.distance_km
+  distance: trips.distance_km
+  avg_trip_distance: trips.distance_km
   energy_kwh: trips.energy_kwh
+  energy used: trips.energy_kwh
+  electricity used: trips.energy_kwh
+  energy consumption: trips.energy_kwh
   idle_minutes: trips.idle_minutes
   avg_temp_c: trips.avg_temp_c
+  # --- Charging Sessions ---
   session_id: charging_sessions.session_id
+  charging session: charging_sessions.session_id
+  charging sessions: charging_sessions.session_id
+  charge event: charging_sessions.session_id
+  charge events: charging_sessions.session_id
+  times charged: charging_sessions.session_id
+  times charging: charging_sessions.session_id
   start_soc: charging_sessions.start_soc
   end_soc: charging_sessions.end_soc
   location: charging_sessions.location
+  depot: charging_sessions.location
+  depot a: charging_sessions.location
+  depot b: charging_sessions.location
+  # --- Drivers ---
   driver_id: drivers.driver_id
   name: drivers.name
   license_no: drivers.license_no
   hire_date: drivers.hire_date
+  # --- Alerts ---
   alert_id: alerts.alert_id
   alert_type: alerts.alert_type
   severity: alerts.severity
@@ -31,10 +56,15 @@ mappings:
   threshold: alerts.threshold
   resolved_bool: alerts.resolved_bool
   resolved_ts: alerts.resolved_ts
+  # --- Battery Cycles / Health ---
   cycle_id: battery_cycles.cycle_id
   ts: battery_cycles.ts
-  dod_pct: battery_cycles.dod_pct
+  battery health: battery_cycles.soh_pct
+  soh: battery_cycles.soh_pct
+  state of health: battery_cycles.soh_pct
   soh_pct: battery_cycles.soh_pct
+  dod_pct: battery_cycles.dod_pct
+  # --- Telemetry ---
   soc_pct: raw_telemetry.soc_pct
   pack_voltage_v: raw_telemetry.pack_voltage_v
   pack_current_a: raw_telemetry.pack_current_a
@@ -43,15 +73,27 @@ mappings:
   longitude: raw_telemetry.longitude
   speed_kph: raw_telemetry.speed_kph
   odo_km: raw_telemetry.odo_km
+  # --- Maintenance ---
   maint_id: maintenance_logs.maint_id
   maint_type: maintenance_logs.maint_type
   cost_sgd: maintenance_logs.cost_sgd
   notes: maintenance_logs.notes
+  # --- Geofence ---
   geofence_name: geofence_events.geofence_name
   enter_ts: geofence_events.enter_ts
   exit_ts: geofence_events.exit_ts
+  # --- Fleet Summary ---
   total_distance_km: fleet_daily_summary.total_distance_km
   total_energy_kwh: fleet_daily_summary.total_energy_kwh
   active_vehicles: fleet_daily_summary.active_vehicles
   avg_soc_pct: fleet_daily_summary.avg_soc_pct
+  # --- Driver Trip Map ---
   primary_bool: driver_trip_map.primary_bool
+  # --- Date/Time (general) ---
+  date: trips.start_ts
+  time: trips.start_ts
+  month: trips.start_ts
+  year: trips.start_ts
+  # --- Active/Service ---
+  in service: trips.trip_id
+  active: trips.trip_id

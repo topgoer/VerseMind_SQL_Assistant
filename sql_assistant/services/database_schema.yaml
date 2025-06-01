@@ -1,0 +1,283 @@
+tables:
+  fleets:
+    columns:
+      fleet_id:
+        type: integer
+        example: '1'
+      name:
+        type: varchar
+        example: GreenGo
+      country:
+        type: varchar
+        example: SG
+      time_zone:
+        type: varchar
+        example: Asia/Singapore
+  vehicles:
+    columns:
+      vehicle_id:
+        type: integer
+        example: '1'
+      vin:
+        type: varchar
+        example: GBM6296G
+      fleet_id:
+        type: integer
+        example: '1'
+      model:
+        type: varchar
+        example: SRM T3
+      make:
+        type: varchar
+        example: SRM
+      variant:
+        type: varchar
+        example: T3
+      registration_no:
+        type: varchar
+        example: GBM6296G
+      purchase_date:
+        type: varchar
+        example: '2024-05-01'
+  drivers:
+    columns:
+      driver_id:
+        type: integer
+        example: '1'
+      fleet_id:
+        type: integer
+        example: '1'
+      name:
+        type: varchar
+        example: Alex Chan
+      license_no:
+        type: varchar
+        example: S1234567A
+      hire_date:
+        type: varchar
+        example: '2022-06-01'
+  trips:
+    columns:
+      trip_id:
+        type: integer
+        example: '1'
+      vehicle_id:
+        type: integer
+        example: '1'
+      start_ts:
+        type: varchar
+        example: '2025-05-14T00:00:00'
+      end_ts:
+        type: varchar
+        example: '2025-05-14T02:00:00'
+      distance_km:
+        type: integer
+        example: '30'
+      energy_kwh:
+        type: integer
+        example: '12'
+      idle_minutes:
+        type: integer
+        example: '6'
+      avg_temp_c:
+        type: numeric
+        example: '30.8'
+  raw_telemetry:
+    columns:
+      ts:
+        type: varchar
+        example: '2025-05-13T13:00:00'
+      vehicle_id:
+        type: integer
+        example: '1'
+      soc_pct:
+        type: integer
+        example: '68'
+      pack_voltage_v:
+        type: numeric
+        example: '355.3'
+      pack_current_a:
+        type: numeric
+        example: '-45.0'
+      batt_temp_c:
+        type: numeric
+        example: '28.8'
+      latitude:
+        type: numeric
+        example: '1.3236471214164012'
+      longitude:
+        type: numeric
+        example: '103.81766994874228'
+      speed_kph:
+        type: integer
+        example: '0'
+      odo_km:
+        type: numeric
+        example: '10000.0'
+  processed_metrics:
+    columns:
+      ts:
+        type: varchar
+        example: '2025-05-13T13:00:00'
+      vehicle_id:
+        type: integer
+        example: '1'
+      avg_speed_kph_15m:
+        type: numeric
+        example: '1.6786320371258352'
+      distance_km_15m:
+        type: numeric
+        example: '0.0'
+      energy_kwh_15m:
+        type: numeric
+        example: '1.61'
+      battery_health_pct:
+        type: integer
+        example: '100'
+      soc_band:
+        type: varchar
+        example: 60-80
+  maintenance_logs:
+    columns:
+      maint_id:
+        type: integer
+        example: '1'
+      vehicle_id:
+        type: integer
+        example: '3'
+      maint_type:
+        type: varchar
+        example: BMS Update
+      start_ts:
+        type: varchar
+        example: '2025-04-29T12:00:00'
+      end_ts:
+        type: varchar
+        example: '2025-04-30T12:00:00'
+      cost_sgd:
+        type: integer
+        example: '800'
+      notes:
+        type: varchar
+        example: Firmware
+  geofence_events:
+    columns:
+      event_id:
+        type: integer
+        example: '1'
+      vehicle_id:
+        type: integer
+        example: '1'
+      geofence_name:
+        type: varchar
+        example: Depot
+      enter_ts:
+        type: varchar
+        example: '2025-05-14T06:00:00'
+      exit_ts:
+        type: varchar
+        example: '2025-05-14T07:00:00'
+  fleet_daily_summary:
+    columns:
+      fleet_id:
+        type: integer
+        example: '1'
+      date:
+        type: varchar
+        example: '2025-05-13'
+      total_distance_km:
+        type: integer
+        example: '350'
+      total_energy_kwh:
+        type: integer
+        example: '280'
+      active_vehicles:
+        type: integer
+        example: '3'
+      avg_soc_pct:
+        type: integer
+        example: '55'
+  driver_trip_map:
+    columns:
+      trip_id:
+        type: integer
+        example: '1'
+      driver_id:
+        type: integer
+        example: '1'
+      primary_bool:
+        type: boolean
+        example: 'True'
+  charging_sessions:
+    columns:
+      session_id:
+        type: integer
+        example: '1'
+      vehicle_id:
+        type: integer
+        example: '1'
+      start_ts:
+        type: varchar
+        example: '2025-05-13T07:00:00'
+      end_ts:
+        type: varchar
+        example: '2025-05-13T08:00:00'
+      start_soc:
+        type: integer
+        example: '20'
+      end_soc:
+        type: integer
+        example: '40'
+      energy_kwh:
+        type: integer
+        example: '20'
+      location:
+        type: varchar
+        example: Depot A
+  battery_cycles:
+    columns:
+      cycle_id:
+        type: integer
+        example: '1'
+      vehicle_id:
+        type: integer
+        example: '1'
+      ts:
+        type: varchar
+        example: '2025-05-14T12:00:00'
+      dod_pct:
+        type: integer
+        example: '69'
+      soh_pct:
+        type: integer
+        example: '98'
+  alerts:
+    columns:
+      alert_id:
+        type: integer
+        example: '1'
+      vehicle_id:
+        type: integer
+        example: '1'
+      alert_type:
+        type: varchar
+        example: HighTemp
+      severity:
+        type: varchar
+        example: High
+      alert_ts:
+        type: varchar
+        example: '2025-05-14T12:00:00'
+      value:
+        type: numeric
+        example: '34.1'
+      threshold:
+        type: integer
+        example: '33'
+      resolved_bool:
+        type: boolean
+        example: 'False'
+      resolved_ts:
+        type: varchar
+        example: '2025-05-14T11:00:00'
+critical_info: []

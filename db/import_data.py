@@ -13,10 +13,8 @@ Database connection can be configured using environment variables:
 - DB_NAME: Database name (default: sql_assistant)
 """
 import os
-import sys
 import asyncio
 import asyncpg
-from datetime import datetime
 import io
 
 # Try to import dotenv, install it if it's not available

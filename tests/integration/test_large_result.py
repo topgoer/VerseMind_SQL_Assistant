@@ -43,13 +43,15 @@ async def test_large_result_path():
         test_filepath = os.path.join("static", test_filename)
         
         # Set up mock return values for process_query
-        mock_process.return_value = (
-            "Found 150 telemetry records.",
-            "SELECT * FROM raw_telemetry LIMIT 5000",
-            None,  # No rows for large result
-            f"/static/{test_filename}", 
-            False  # Not fallback
-        )
+        mock_process.return_value = {
+            "answer": "Found 150 telemetry records.",
+            "sql": "SELECT * FROM raw_telemetry LIMIT 5000",
+            "rows": None,  # No rows for large result
+            "download_url": f"/static/{test_filename}",
+            "is_fallback": False,
+            "prompt_sql": "",
+            "prompt_answer": ""
+        }
         
         # Create an empty file to simulate the CSV being written
         os.makedirs("static", exist_ok=True)
@@ -102,7 +104,15 @@ async def test_small_result_path():
         
         # Set up mock return values for a small result set
         mock_rows = [{"id": i, "value": f"test{i}"} for i in range(10)]
-        mock_process.return_value = ("Test answer", "SELECT * FROM test LIMIT 10", mock_rows, None, False)
+        mock_process.return_value = {
+            "answer": "Test answer",
+            "sql": "SELECT * FROM test LIMIT 10",
+            "rows": mock_rows,
+            "download_url": None,
+            "is_fallback": False,
+            "prompt_sql": "",
+            "prompt_answer": ""
+        }
         
         # Test /chat endpoint
         response = client.post(

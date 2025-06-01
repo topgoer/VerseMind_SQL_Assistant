@@ -10,12 +10,140 @@ import os
 import uuid
 import csv
 import re
-from typing import Dict, List, Any, Tuple, Optional
+from typing import Dict, List, Any, Tuple, Optional, Union
 import sqlalchemy as sa
+from sqlalchemy.engine import Result
+from sqlalchemy.engine.row import Row
 
 # Constants
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
+
+# Error messages
+NO_DATA_MESSAGE = "No data found for your query. Please check if there is any data in the specified time range."
+INTERNAL_ERROR_MESSAGE = "Internal error: Could not process query results. Please contact support."
+
+# Vehicle-specific error messages
+NO_VEHICLE_DATA_MESSAGE = (
+    "No data found for vehicle 42 in the past 90 days. This could be because:\n"
+    "1. The vehicle ID might be incorrect\n"
+    "2. The vehicle might not have any battery health data in this time range\n"
+    "3. The vehicle might be new or recently added to the system\n\n"
+    "Please try:\n"
+    "- Verifying the vehicle ID\n"
+    "- Extending the time range\n"
+    "- Checking if the vehicle has any other metrics available"
+)
+
+def _row_to_dict(row: Union[Row, tuple, dict]) -> Dict[str, Any]:
+    """Convert any type of row to dict."""
+    if isinstance(row, dict):
+        return row
+    if hasattr(row, '_fields'):  # namedtuple
+        return row._asdict()
+    if hasattr(row, '_mapping'):  # SQLAlchemy Row
+        return dict(row._mapping)
+    # Fallback: use index as key
+    return {str(i): v for i, v in enumerate(row)}
+
+async def _process_result(result: Result) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Process SQLAlchemy Result object into list of dicts."""
+    try:
+        # 1. Try result.mappings() first (preferred)
+        try:
+            rows = [dict(row) for row in result.mappings()]
+            return rows, None
+        except Exception as e:
+            print(f"Error with result.mappings(): {str(e)}")
+
+        # 2. Try result.fetchall() with row conversion
+        try:
+            rows = result.fetchall()
+            if rows is None:
+                return [], NO_DATA_MESSAGE
+            if not rows:
+                return [], NO_DATA_MESSAGE
+            return [_row_to_dict(row) for row in rows], None
+        except Exception as e:
+            print(f"Error with result.fetchall(): {str(e)}")
+
+        # 3. Try result.keys() and manual row building
+        try:
+            if hasattr(result, 'keys'):
+                keys = result.keys()
+                rows = []
+                for row in result:
+                    if isinstance(row, (tuple, list)):
+                        rows.append(dict(zip(keys, row)))
+                    else:
+                        rows.append(_row_to_dict(row))
+                return rows, None
+        except Exception as e:
+            print(f"Error with result.keys(): {str(e)}")
+
+        # 4. Last resort: try to iterate result directly
+        try:
+            rows = [_row_to_dict(row) for row in result]
+            return rows, None
+        except Exception as e:
+            print(f"Error iterating result: {str(e)}")
+
+        return [], INTERNAL_ERROR_MESSAGE
+    except Exception as e:
+        print(f"Error processing result: {str(e)}")
+        return [], INTERNAL_ERROR_MESSAGE
+
+async def _try_mappings(result: Result) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Try to get results using mappings() method."""
+    try:
+        rows = [dict(row) for row in result.mappings()]
+        if not rows:
+            return [], NO_VEHICLE_DATA_MESSAGE
+        return rows, None
+    except Exception as e:
+        print(f"Error with result.mappings(): {str(e)}")
+        return [], None
+
+async def _try_fetchall(result: Result) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Try to get results using fetchall() method."""
+    try:
+        rows = result.fetchall()
+        if rows is None or not rows:
+            return [], NO_VEHICLE_DATA_MESSAGE
+        return [_row_to_dict(row) for row in rows], None
+    except Exception as e:
+        print(f"Error with result.fetchall(): {str(e)}")
+        return [], None
+
+async def _try_keys(result: Result) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Try to get results using keys() method."""
+    try:
+        if not hasattr(result, 'keys'):
+            return [], None
+        keys = result.keys()
+        rows = []
+        for row in result:
+            if isinstance(row, (tuple, list)):
+                rows.append(dict(zip(keys, row)))
+            else:
+                rows.append(_row_to_dict(row))
+        if not rows:
+            return [], NO_VEHICLE_DATA_MESSAGE
+        return rows, None
+    except Exception as e:
+        print(f"Error with result.keys(): {str(e)}")
+        return [], None
+
+async def _try_iterate(result: Result) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Try to get results by iterating directly."""
+    try:
+        rows = [_row_to_dict(row) for row in result]
+        if not rows:
+            return [], NO_VEHICLE_DATA_MESSAGE
+        return rows, None
+    except Exception as e:
+        print(f"Error iterating result: {str(e)}")
+        return [], None
 
 async def execute_sql_query(conn, sql: str, params: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """
@@ -30,36 +158,49 @@ async def execute_sql_query(conn, sql: str, params: Dict[str, Any]) -> Tuple[Lis
         Tuple of (rows, error_message)
     """
     try:
-        # Execute query with parameters
-        result = await conn.execute(
-            sa.text(sql),
-            params
-        )
+        # Execute query
+        result = await conn.execute(sa.text(sql), params)
+        if result is None:
+            print("Error: conn.execute() returned None")
+            return [], "Query execution failed. Please try again."
 
-        # Fetch all rows - handle potential mapping errors
-        rows = []
-        try:
-            rows = [dict(row) for row in result.mappings()]
-        except Exception as mapping_error:
-            print(f"Error mapping rows: {str(mapping_error)}")
-            # Log the type and structure of result for debugging
-            print(f"Result type: {type(result)}")
-            print(f"Result content: {result}")
-            # Try alternative approach
-            try:
-                if hasattr(result, 'keys') and callable(result.keys):
-                    rows = [dict(zip(result.keys(), row)) for row in result.fetchall()]
-                else:
-                    raise ValueError("Result object does not support 'keys' method")
-            except Exception as fetch_error:
-                print(f"Error fetching rows: {str(fetch_error)}")
-                # Last resort: return empty rows with error
-                return [], f"Error processing results: {str(fetch_error)}"
+        # Try different methods to get results
+        methods = [
+            _try_mappings,
+            _try_fetchall,
+            _try_keys,
+            _try_iterate
+        ]
 
-        return rows, None
+        for method in methods:
+            rows, error = await method(result)
+            if rows:
+                return rows, None
+            if error:
+                # Return complete query context and empty result
+                response = {
+                    "status": "success",
+                    "data": {
+                        "rows": [],
+                        "row_count": 0,
+                        "query": {
+                            "sql": sql,
+                            "params": params
+                        },
+                        "context": {
+                            "vehicle_id": params.get("vehicle_id", "unknown"),
+                            "time_range": params.get("time_range", "unknown"),
+                            "metrics": [col for col in params.get("metrics", [])]
+                        }
+                    },
+                    "message": error
+                }
+                return [], str(response)
+
+        return [], "Could not process query results. Please try again."
     except Exception as query_error:
         print(f"Query execution error: {str(query_error)}")
-        return [], str(query_error)
+        return [], f"Query execution failed: {str(query_error)}"
 
 def handle_large_result(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """

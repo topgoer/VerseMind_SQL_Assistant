@@ -1,0 +1,72 @@
+error_patterns:
+  - name: "last_active_date"
+    description: "Attempting to use non-existent last_active_date column"
+    correct_pattern: "JOIN trips ON vehicles.vehicle_id = trips.vehicle_id WHERE trips.start_ts >= date_trunc('month', CURRENT_DATE)"
+    common_mistakes:
+      - "last_active_date"
+      - "active_date"
+      - "status = active"
+    correction_template: |
+      SELECT COUNT(DISTINCT v.vehicle_id) 
+      FROM vehicles v 
+      JOIN trips t ON v.vehicle_id = t.vehicle_id 
+      WHERE t.start_ts >= date_trunc('month', CURRENT_DATE)
+
+  - name: "energy_column"
+    description: "Using incorrect energy column name"
+    correct_pattern: "trips.energy_kwh"
+    common_mistakes:
+      - "trips.energy"
+      - "energy_consumed"
+      - "energy_usage"
+    correction_template: |
+      SELECT SUM(t.energy_kwh) as total_energy
+      FROM trips t
+      WHERE t.vehicle_id = :vehicle_id
+
+  - name: "distance_column"
+    description: "Using incorrect distance column name"
+    correct_pattern: "trips.distance_km"
+    common_mistakes:
+      - "trip_distance"
+      - "distance"
+      - "total_distance"
+    correction_template: |
+      SELECT SUM(t.distance_km) as total_distance
+      FROM trips t
+      WHERE t.vehicle_id = :vehicle_id
+
+business_concepts:
+  active_vehicle:
+    definition: "A vehicle with trips in the current month"
+    correct_query: |
+      SELECT COUNT(DISTINCT v.vehicle_id) 
+      FROM vehicles v 
+      JOIN trips t ON v.vehicle_id = t.vehicle_id 
+      WHERE t.start_ts >= date_trunc('month', CURRENT_DATE)
+    common_mistakes:
+      - "last_active_date"
+      - "active_date"
+      - "status = active"
+
+  energy_consumption:
+    definition: "Total energy consumed by a vehicle in kilowatt-hours"
+    correct_query: |
+      SELECT SUM(t.energy_kwh) as total_energy
+      FROM trips t
+      WHERE t.vehicle_id = :vehicle_id
+    common_mistakes:
+      - "energy"
+      - "energy_consumed"
+      - "energy_usage"
+
+  trip_distance:
+    definition: "Total distance traveled by a vehicle in kilometers"
+    correct_query: |
+      SELECT SUM(t.distance_km) as total_distance
+      FROM trips t
+      WHERE t.vehicle_id = :vehicle_id
+    common_mistakes:
+      - "trip_distance"
+      - "distance"
+      - "total_distance" 

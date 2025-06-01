@@ -22,3 +22,6 @@ cffi>=1.14
 pycparser>=2.22
 python-dotenv>=1.0.0
 PyYAML>=6.0.2
+pandas
+pyyaml
+requests

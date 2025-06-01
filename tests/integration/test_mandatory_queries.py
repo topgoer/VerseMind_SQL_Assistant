@@ -48,7 +48,15 @@ async def test_mandatory_queries():
         mock_check_keys.return_value = ("dummy_key", None, None)
         
         # Set up mock return values
-        mock_process.return_value = ("Test answer", "SELECT * FROM test", [{"count": 5}], None, False)
+        mock_process.return_value = {
+            "answer": "Test answer",
+            "sql": "SELECT * FROM test", 
+            "rows": [{"count": 5}],
+            "download_url": None,
+            "is_fallback": False,
+            "prompt_sql": "",
+            "prompt_answer": ""
+        }
         
         # Test each mandatory query
         for query in MANDATORY_QUERIES:

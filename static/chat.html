@@ -190,11 +190,11 @@
             
             <div class="examples">
                 <h3>Example Queries:</h3>
-                <div class="example-query">How many SRM T3 vans are active this month?</div>
-                <div class="example-query">Which three vehicles consumed the most energy last week?</div>
-                <div class="example-query">Show battery-health trend for vehicle 42 over the past 90 days.</div>
-                <div class="example-query">What is the average trip distance for each vehicle model?</div>
-                <div class="example-query">How many charging sessions occurred at Depot A yesterday?</div>
+                <div class="example-query">How many SRM T3 vans were in service during May 2025?</div>
+                <div class="example-query">Which three vehicles used the most electricity in May 2025?</div>
+                <div class="example-query">What was the battery health trend for vehicle 1 in May 2025?</div>
+                <div class="example-query">What is the average journey distance for each type of vehicle in May 2025?</div>
+                <div class="example-query">Count the number of charging sessions at Depot A in May 2025</div>
             </div>
         </div>
 
@@ -214,7 +214,18 @@
             <div class="output-container">
                 <h3>SQL Query</h3>
                 <div class="sql-query" id="sql-output"></div>
-            </div>            <div class="output-container" id="results-container">
+            </div>
+
+            <div class="output-container">
+                <h3>Prompt (SQL Generation)</h3>
+                <pre id="prompt-sql-output" style="white-space: pre-wrap; background-color: #f1f1f1; padding: 10px; border-radius: 4px; max-height: 300px; overflow: auto;"></pre>
+            </div>
+            <div class="output-container">
+                <h3>Prompt (Answer Generation)</h3>
+                <pre id="prompt-answer-output" style="white-space: pre-wrap; background-color: #f1f1f1; padding: 10px; border-radius: 4px; max-height: 300px; overflow: auto;"></pre>
+            </div>
+
+            <div class="output-container" id="results-container">
                 <h3>Results</h3>
                 <div id="table-container"></div>
                 <div id="download-container" style="display: none;">
@@ -382,8 +393,16 @@
                 // Display answer
                 answerOutput.textContent = data.answer;
 
-                // Display SQL
-                sqlOutput.textContent = data.sql;
+                // Display SQL (with missing warning if empty)
+                sqlOutput.textContent = (data.sql && data.sql.trim()) ? data.sql : '[SQL 未生成或主流程未完成]';
+
+                // Display prompt_sql (with missing warning if empty)
+                document.getElementById('prompt-sql-output').textContent =
+                    (data.prompt_sql && data.prompt_sql.trim()) ? data.prompt_sql : '[Prompt (SQL Generation) 缺失或主流程未完成]';
+
+                // Display prompt_answer (with missing warning if empty)
+                document.getElementById('prompt-answer-output').textContent =
+                    (data.prompt_answer && data.prompt_answer.trim()) ? data.prompt_answer : '[Prompt (Answer Generation) 缺失或主流程未完成]';
 
                 // Handle results
                 if (data.rows && data.rows.length > 0) {

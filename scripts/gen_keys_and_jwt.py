@@ -1,5 +1,4 @@
 import os
-import sys
 import argparse
 import subprocess
 from jose import jwt
@@ -51,46 +50,6 @@ def generate_keys(force=False):
         ))
     
     return True
-
-def update_env_file():
-    """Update .env file with JWT_PUBLIC_KEY"""
-    # Read public key
-    with open(PUBLIC_KEY_FILE, "r") as f:
-        public_key = f.read()
-    
-    # Format the key for .env file
-    # Replace newlines with literal '\n' for .env file format
-    env_key = public_key.replace("\n", "\\n")
-    
-    # Check if .env exists and if it already has JWT_PUBLIC_KEY
-    env_content = ""
-    key_exists = False
-    
-    if os.path.exists(ENV_FILE):
-        with open(ENV_FILE, "r") as f:
-            env_content = f.read()
-        
-        # Check if JWT_PUBLIC_KEY is already in the file
-        if "JWT_PUBLIC_KEY=" in env_content:
-            # Replace the existing key
-            lines = env_content.split("\n")
-            for i, line in enumerate(lines):
-                if line.startswith("JWT_PUBLIC_KEY="):
-                    lines[i] = f'JWT_PUBLIC_KEY="{env_key}"'
-                    key_exists = True
-                    break
-            env_content = "\n".join(lines)
-        
-    # If key doesn't exist, append it
-    if not key_exists:
-        if env_content and not env_content.endswith("\n"):
-            env_content += "\n"
-        env_content += f'JWT_PUBLIC_KEY="{env_key}"\n'
-      # Write back to .env file
-    with open(ENV_FILE, "w") as f:
-        f.write(env_content)
-    
-    print("Updated .env file with JWT_PUBLIC_KEY")
 
 def restart_docker_container():
     """Restart the web container to apply new key"""
@@ -148,9 +107,6 @@ def keys_match(public_key_path="public.pem", private_key_path="private.pem"):
 args = parse_args()
 fleet_id = args.fleet_id
 keys_generated = generate_keys(args.force)
-
-# Always update .env file to ensure JWT_PUBLIC_KEY is set
-update_env_file()
 
 # Restart Docker container if requested or if new keys were generated
 if args.update_docker or keys_generated:

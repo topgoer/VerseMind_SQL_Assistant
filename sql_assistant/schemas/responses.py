@@ -22,3 +22,11 @@ class ChatResponse(BaseModel):
         False,
         description="Indicates whether a fallback query was used due to LLM failure"
     )
+    prompt_sql: Optional[str] = Field(
+        None,
+        description="The prompt sent to the LLM for SQL generation (first round)."
+    )
+    prompt_answer: Optional[str] = Field(
+        None,
+        description="The prompt/context sent to the LLM for answer generation (second round)."
+    )
