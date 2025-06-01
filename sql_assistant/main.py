@@ -7,10 +7,6 @@ import os
 from typing import Dict
 from pathlib import Path
 from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
-
 from fastapi import FastAPI, Depends, HTTPException, Request, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +15,10 @@ from fastapi.responses import FileResponse
 from sql_assistant.auth import get_fleet_id, FleetMiddleware
 from sql_assistant.schemas.responses import ChatResponse
 from sql_assistant.schemas.mcp import MCPEnvelope, Step
-from sql_assistant.services.pipeline import process_query, nl_to_sql, sql_exec, answer_format, semantic_mappings
+from sql_assistant.services.pipeline import process_query, nl_to_sql, sql_exec, answer_format
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Get absolute path to static directory
 STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -117,7 +116,7 @@ async def chat(
         # Process query end-to-end
         result = await process_query(query, fleet_id)
         
-        # 直接用 dict 字段构造 ChatResponse
+        # Construct ChatResponse directly using dict fields
         response = ChatResponse(
             answer=result["answer"],
             sql=result["sql"],

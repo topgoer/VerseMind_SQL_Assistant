@@ -10,30 +10,24 @@ import os
 import json
 import re
 import httpx
-from typing import Dict, List, Optional, Tuple, Any, Set
-from collections import defaultdict
-from datetime import datetime
+from typing import Dict, List, Optional, Any
 import yaml
 
 import anthropic
 from mistralai.client import MistralClient
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import text as sa_text
-from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import create_async_engine
 from openai import AsyncOpenAI
 
 from sql_assistant.schemas.generate_sql import GenerateSQLParameters
 from sql_assistant.guardrails import validate_sql_with_extraction, extract_sql_query
 from sql_assistant.services.domain_glossary import DOMAIN_GLOSSARY
 from sql_assistant.services.sql_correction import (
-    check_sql_content, is_valid_sql, correct_active_conditions,
-    correct_last_active_date, ensure_trips_join, attempt_aggressive_extraction,
-    ACTIVE_VEHICLES_SQL_PATTERN
+    is_valid_sql, correct_active_conditions,
+    correct_last_active_date, ensure_trips_join, attempt_aggressive_extraction
 )
 from sql_assistant.services.llm_provider import (
-    check_llm_api_keys, try_llm_provider, handle_llm_failures, _deepseek_nl_to_sql
+    check_llm_api_keys, _deepseek_nl_to_sql
 )
 from sql_assistant.services.error_handler import error_handler
 from sql_assistant.services.db_operations import execute_sql_query
@@ -595,7 +589,7 @@ async def _openai_nl_to_sql(query: str) -> Dict[str, str]:
         sql = _extract_sql_from_openai_response(function_args)
         extracted_sql = _validate_and_extract_sql(sql)
         return {"sql": extracted_sql}
-    except Exception:
+    except Exception as e:
         print(f"OpenAI API error: {str(e)}")
         raise ValueError(f"OpenAI API error: {str(e)}")
 
@@ -664,7 +658,7 @@ async def _anthropic_nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
         extracted_sql = _validate_and_extract_sql(sql)
         
         return {"sql": extracted_sql}
-    except Exception:
+    except Exception as e:
         print(f"Anthropic API error: {str(e)}")
         raise ValueError(f"Anthropic API error: {str(e)}")
 
@@ -726,7 +720,7 @@ async def _mistral_nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
         extracted_sql = _validate_and_extract_sql(sql)
         
         return {"sql": extracted_sql}
-    except Exception:
+    except Exception as e:
         print(f"Mistral API error: {str(e)}")
         raise ValueError(f"Mistral API error: {str(e)}")
 
@@ -1597,6 +1591,6 @@ async def _try_llm_provider(context: dict, openai_key: str, anthropic_key: str, 
             pass
         else:
             raise ValueError("No valid LLM API keys provided.")
-    except Exception:
+    except Exception as e:
         print(f"Error in _try_llm_provider: {str(e)}")
         raise

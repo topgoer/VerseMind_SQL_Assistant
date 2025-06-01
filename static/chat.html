@@ -391,18 +391,16 @@
 
             function displayResults(data) {
                 // Display answer
-                answerOutput.textContent = data.answer;
-
-                // Display SQL (with missing warning if empty)
-                sqlOutput.textContent = (data.sql && data.sql.trim()) ? data.sql : '[SQL 未生成或主流程未完成]';
+                answerOutput.textContent = data.answer;                // Display SQL (with missing warning if empty)
+                sqlOutput.textContent = (data.sql && data.sql.trim()) ? data.sql : '[SQL not generated or main process incomplete]';
 
                 // Display prompt_sql (with missing warning if empty)
                 document.getElementById('prompt-sql-output').textContent =
-                    (data.prompt_sql && data.prompt_sql.trim()) ? data.prompt_sql : '[Prompt (SQL Generation) 缺失或主流程未完成]';
+                    (data.prompt_sql && data.prompt_sql.trim()) ? data.prompt_sql : '[Prompt (SQL Generation) missing or main process incomplete]';
 
                 // Display prompt_answer (with missing warning if empty)
                 document.getElementById('prompt-answer-output').textContent =
-                    (data.prompt_answer && data.prompt_answer.trim()) ? data.prompt_answer : '[Prompt (Answer Generation) 缺失或主流程未完成]';
+                    (data.prompt_answer && data.prompt_answer.trim()) ? data.prompt_answer : '[Prompt (Answer Generation) missing or main process incomplete]';
 
                 // Handle results
                 if (data.rows && data.rows.length > 0) {

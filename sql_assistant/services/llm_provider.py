@@ -82,10 +82,11 @@ async def _deepseek_nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
     Use DeepSeek to convert natural language to SQL.
     """
     api_key = os.getenv("DEEPSEEK_API_KEY")
+    
     if not api_key:
         raise ValueError("DEEPSEEK_API_KEY is not set in environment variables.")
 
-    # 构造 DeepSeek API 请求
+    # Construct DeepSeek API request
     url = "https://api.deepseek.com/v1/chat/completions"
     prompt = f"""You are a SQL expert for a fleet management system.
 Generate PostgreSQL queries based on natural language questions.
@@ -114,18 +115,19 @@ User Query: {query}"""
         "max_tokens": 512,
         "temperature": 0.2
     }
+    
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(url, headers=headers, json=data)
         response.raise_for_status()
         result = response.json()
-        # 清理返回的 SQL，移除可能的 markdown 格式
+        # Clean returned SQL, remove possible markdown formatting
         sql = result["choices"][0]["message"]["content"].strip()
         sql = sql.replace("```sql", "").replace("```", "").strip()
         if not sql:
             raise ValueError("DeepSeek returned empty SQL text")
         return {"sql": sql}
 
-# 在后续可以添加 deepseek 的 provider 函数和逻辑
-# 例如：
+# DeepSeek provider functions and logic can be added later
+# For example:
 # async def _deepseek_nl_to_sql(query: str, fleet_id: int) -> Dict[str, str]:
 #     ...

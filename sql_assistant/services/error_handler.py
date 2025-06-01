@@ -8,7 +8,7 @@ This module provides functionality for:
 """
 import re
 import yaml
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, Optional, Tuple, Any
 from datetime import datetime
 from collections import defaultdict
 import os

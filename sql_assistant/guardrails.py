@@ -5,7 +5,7 @@ This module provides validation and security checks for SQL queries.
 """
 import re
 import yaml
-from typing import Tuple, Dict, List
+from typing import Tuple, Dict
 from pathlib import Path
 from .services.domain_glossary import DOMAIN_GLOSSARY
 
