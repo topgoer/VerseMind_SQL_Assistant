@@ -27,8 +27,8 @@ A natural language analytics layer for fleet operators with dual interface suppo
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/topgoer/sql-assistant.git
-cd sql-assistant
+git clone https://github.com/topgoer/VerseMind_SQL_Assistant.git
+cd VerseMind_SQL_Assistant
 ```
 
 2. Create a `.env` file from the example:
@@ -94,8 +94,9 @@ docker compose --profile seed up
    Note: The seed service uses the same environment variables from your `.env` file.
 
 7. Access the application:
-   - Frontend: http://localhost:3000
-   - API: http://localhost:8000
+   - Frontend (development): http://localhost:5173 (run `npm run dev` in the frontend directory)
+   - API: http://localhost:8001
+   - Chat Interface: http://localhost:8001/chat.html
 
 ### Verifying Data Import
 
@@ -187,8 +188,9 @@ npm install
 npm run dev
 ```
 
-- The app will be available at http://localhost:5173/
-- The frontend will automatically proxy API requests to the backend (see `vite.config.ts` for proxy settings).
+- The app will be available at http://localhost:5173/ (development server)
+- The frontend will automatically proxy API requests to the backend (see `vite.config.ts` for proxy settings)
+- Note: For production deployment, the frontend would need to be built with `npm run build` and served separately
 
 #### Troubleshooting
 - If you see styling issues, ensure you are using Tailwind CSS v3 (see `package.json`).
