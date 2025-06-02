@@ -19,7 +19,7 @@ A natural language analytics layer for fleet operators with dual interface suppo
 ### Prerequisites
 
 - Docker and Docker Compose v2+ (the project uses modern Compose features)
-- OpenAI API key (or Anthropic/Mistral as fallbacks)
+- OpenAI API key (or Anthropic/Mistral/DeepSeek as fallbacks)
 - Python 3.12+ (for local development)
 
 ### Installation
@@ -45,6 +45,7 @@ OPENAI_API_KEY=your_openai_api_key
 # Optional fallbacks
 # ANTHROPIC_API_KEY=your_anthropic_api_key
 # MISTRAL_API_KEY=your_mistral_api_key
+# DEEPSEEK_API_KEY=your_deepseek_api_key
 ENABLE_MCP=1  # Set to 1 to enable Model Control Protocol support
 ```
 
