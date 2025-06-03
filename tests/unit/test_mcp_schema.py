@@ -11,14 +11,14 @@ from sql_assistant.schemas.mcp import MCPEnvelope, Step
 def test_valid_step():
     """Test that valid Step objects can be created."""
     # Test with minimal fields
-    step1 = Step(tool="nl_to_sql")
-    assert step1.tool == "nl_to_sql"
+    step1 = Step(tool="llm_nl_to_sql")
+    assert step1.tool == "llm_nl_to_sql"
     assert step1.input is None
     assert step1.output is None
     
     # Test with input
-    step2 = Step(tool="nl_to_sql", input={"query": "test"})
-    assert step2.tool == "nl_to_sql"
+    step2 = Step(tool="llm_nl_to_sql", input={"query": "test"})
+    assert step2.tool == "llm_nl_to_sql"
     assert step2.input == {"query": "test"}
     assert step2.output is None
     
@@ -52,12 +52,12 @@ def test_valid_envelope():
     envelope2 = MCPEnvelope(
         trace_id=trace_id,
         context={"query": "test"},
-        steps=[Step(tool="nl_to_sql")]
+        steps=[Step(tool="llm_nl_to_sql")]
     )
     assert envelope2.trace_id == trace_id
     assert envelope2.context == {"query": "test"}
     assert len(envelope2.steps) == 1
-    assert envelope2.steps[0].tool == "nl_to_sql"
+    assert envelope2.steps[0].tool == "llm_nl_to_sql"
 
 def test_envelope_serialization():
     """Test that MCPEnvelope can be serialized to and from JSON."""
@@ -66,7 +66,7 @@ def test_envelope_serialization():
         trace_id=trace_id,
         context={"query": "test"},
         steps=[
-            Step(tool="nl_to_sql", output={"sql": "SELECT * FROM test"}),
+            Step(tool="llm_nl_to_sql", output={"sql": "SELECT * FROM test"}),
             Step(tool="sql_exec", output={"rows": [{"id": 1}]}),
             Step(tool="answer_format", output="Test result")
         ]
@@ -92,11 +92,11 @@ def test_envelope_with_all_tools():
         trace_id=uuid.uuid4(),
         context={"query": "test"},
         steps=[
-            Step(tool="nl_to_sql"),
+            Step(tool="llm_nl_to_sql"),
             Step(tool="sql_exec"),
             Step(tool="answer_format")
         ]
     )
     
     assert len(envelope.steps) == 3
-    assert [step.tool for step in envelope.steps] == ["nl_to_sql", "sql_exec", "answer_format"]
+    assert [step.tool for step in envelope.steps] == ["llm_nl_to_sql", "sql_exec", "answer_format"]

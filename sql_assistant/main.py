@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from sql_assistant.auth import get_fleet_id, FleetMiddleware
 from sql_assistant.schemas.responses import ChatResponse
 from sql_assistant.schemas.mcp import MCPEnvelope, Step
-from sql_assistant.services.pipeline import process_query, nl_to_sql, sql_exec, answer_format
+from sql_assistant.services.pipeline import process_query, llm_nl_to_sql, sql_exec, answer_format
 
 # Load environment variables from .env file
 load_dotenv()
@@ -111,10 +111,13 @@ async def chat(
         if not query:
             raise HTTPException(status_code=400, detail="Missing 'query' or 'message' field")
             
-        print(f"Chat endpoint received query: '{query}', fleet_id: {fleet_id}")
+        # Extract strategy parameter (default to 'base' if not provided)
+        strategy = request.get("strategy", "base")
         
-        # Process query end-to-end
-        result = await process_query(query, fleet_id)
+        print(f"Chat endpoint received query: '{query}', fleet_id: {fleet_id}, strategy: {strategy}")
+        
+        # Process query end-to-end with strategy
+        result = await process_query(query, fleet_id, strategy)
         
         # Construct ChatResponse directly using dict fields
         response = ChatResponse(
@@ -145,7 +148,7 @@ async def process_nl_to_sql_step(step: Step, query: str, fleet_id: int, envelope
         envelope: MCP envelope containing the step
     """
     try:
-        step.output = await nl_to_sql(query, fleet_id)
+        step.output = await llm_nl_to_sql(query)
     except Exception as e:
         # Provide helpful context about the error
         raise HTTPException(
@@ -167,11 +170,11 @@ async def get_or_create_sql_step(envelope: MCPEnvelope, current_step_index: int,
         The SQL step (either existing or newly created)
     """
     # Find existing SQL step
-    sql_step = next((s for s in envelope.steps if s.tool == "nl_to_sql"), None)
+    sql_step = next((s for s in envelope.steps if s.tool == "llm_nl_to_sql"), None)
     
     # Create and process a new SQL step if needed
     if not sql_step:
-        sql_step = Step(tool="nl_to_sql")
+        sql_step = Step(tool="llm_nl_to_sql")
         envelope.steps.insert(current_step_index, sql_step)
         await process_nl_to_sql_step(sql_step, query, fleet_id, envelope)
     elif not sql_step.output:
@@ -311,7 +314,7 @@ async def get_step_processor(tool_name: str) -> callable:
     """
     # Map of tool names to their processing functions
     step_processors = {
-        "nl_to_sql": process_nl_to_sql_step,
+        "llm_nl_to_sql": process_nl_to_sql_step,
         "sql_exec": process_sql_exec_step,
         "answer_format": process_answer_format_step
     }

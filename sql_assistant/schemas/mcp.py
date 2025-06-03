@@ -13,7 +13,7 @@ class Step(BaseModel):
     
     Each step has a tool name, optional input, and optional output.
     """
-    tool: Literal["nl_to_sql", "sql_exec", "answer_format"]
+    tool: Literal["llm_nl_to_sql", "sql_exec", "answer_format"]
     input: Optional[Union[Dict[str, Any], str]] = None
     output: Optional[Union[Dict[str, Any], str]] = None
 

@@ -17,6 +17,8 @@ interface ChatPanelProps {
   mode: 'chat' | 'mcp';
 }
 
+type Strategy = 'base' | 'strict' | 'cite';
+
 const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -28,7 +30,15 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
   const [mcpTrace, setMcpTrace] = useState<object | null>(null);
   const [promptSql, setPromptSql] = useState(''); // Renamed from prompt
   const [promptAnswer, setPromptAnswer] = useState(''); // New state for answer prompt
+  const [strategy, setStrategy] = useState<Strategy>('base'); // New state for strategy
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Strategy descriptions
+  const strategyDescriptions = {
+    base: 'Standard context-based generation with comprehensive responses.',
+    strict: 'Explicit disclaimers if the answer cannot be found in the provided context.',
+    cite: 'Requires references to specific context lines used in generating the response.'
+  };
 
   // Helper function to format cell values safely
   const formatCellValue = (value: any): string => {
@@ -83,7 +93,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${jwtToken}`
           },
-          body: JSON.stringify({ query: input })
+          body: JSON.stringify({ 
+            query: input,
+            strategy: strategy 
+          })
         });
 
         if (!response.ok) {
@@ -117,7 +130,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
             trace_id: crypto.randomUUID(),
             context: { query: input },
             steps: [
-              { tool: 'nl_to_sql' },
+              { tool: 'llm_nl_to_sql' },
               { tool: 'sql_exec' },
               { tool: 'answer_format' }
             ]
@@ -133,16 +146,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
         console.log("Received data from /mcp endpoint:", JSON.stringify(data, null, 2));
         
         // Extract data from MCP response
-        const nlToSqlStep = data.steps.find((s: any) => s.tool === 'nl_to_sql');
+        const llmNlToSqlStep = data.steps.find((s: any) => s.tool === 'llm_nl_to_sql');
         const sqlExecStep = data.steps.find((s: any) => s.tool === 'sql_exec');
         const answerStep = data.steps.find((s: any) => s.tool === 'answer_format');
         
         // Update state with response
         setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: answerStep?.output ?? 'No answer generated' }]);
-        setSqlQuery(nlToSqlStep?.output?.sql ?? '');
+        setSqlQuery(llmNlToSqlStep?.output?.sql ?? '');
         setResults(sqlExecStep?.output?.rows ?? null);
         setDownloadUrl(sqlExecStep?.output?.download_url ?? null);
-        setPromptSql(nlToSqlStep?.output?.prompt ?? ''); // Set SQL prompt
+        setPromptSql(llmNlToSqlStep?.output?.prompt ?? ''); // Set SQL prompt
         setPromptAnswer(input); // Use the original user query as the answer prompt for MCP
         setMcpTrace(data);
       }
@@ -173,6 +186,51 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ mode }) => {
               onChange={(e) => setJwtToken(e.target.value)}
               className="mb-2"
             />
+            
+            {/* Strategy Selection */}
+            <div className="mt-3 p-3 border rounded-lg bg-gray-50">
+              <fieldset>
+                <legend className="text-sm font-medium text-gray-700 mb-2">Query Generation Strategy:</legend>
+                <div className="flex flex-wrap gap-4 mb-2">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="strategy"
+                      value="base"
+                      checked={strategy === 'base'}
+                      onChange={(e) => setStrategy(e.target.value as Strategy)}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm">Base</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="strategy"
+                      value="strict"
+                      checked={strategy === 'strict'}
+                      onChange={(e) => setStrategy(e.target.value as Strategy)}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm">Strict</span>
+                  </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="strategy"
+                      value="cite"
+                      checked={strategy === 'cite'}
+                      onChange={(e) => setStrategy(e.target.value as Strategy)}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm">Citation</span>
+                  </label>
+                </div>
+                <div className="text-xs text-gray-600 italic">
+                  {strategyDescriptions[strategy]}
+                </div>
+              </fieldset>
+            </div>
           </div>
         </CardHeader>
         

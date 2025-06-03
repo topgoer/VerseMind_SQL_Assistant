@@ -33,7 +33,7 @@ async def test_chat_vs_mcp_parity():
     with patch('sql_assistant.main.ENABLE_MCP', True):
         # Mock all the necessary functions, including LLM providers
         with patch('sql_assistant.main.process_query') as mock_process, \
-             patch('sql_assistant.main.nl_to_sql') as mock_nl_to_sql, \
+             patch('sql_assistant.main.llm_nl_to_sql') as mock_llm_nl_to_sql, \
              patch('sql_assistant.main.sql_exec') as mock_sql_exec, \
              patch('sql_assistant.main.answer_format') as mock_answer_format, \
              patch('sql_assistant.services.pipeline.check_llm_api_keys') as mock_check_keys:
@@ -56,7 +56,7 @@ async def test_chat_vs_mcp_parity():
                 "prompt_sql": "",
                 "prompt_answer": ""
             }
-            mock_nl_to_sql.return_value = {"sql": test_sql}
+            mock_llm_nl_to_sql.return_value = {"sql": test_sql}
             mock_sql_exec.return_value = {"rows": test_data}
             mock_answer_format.return_value = test_answer
             
@@ -74,7 +74,7 @@ async def test_chat_vs_mcp_parity():
                     "trace_id": str(uuid.uuid4()),
                     "context": {"query": "How many vehicles do we have?"},
                     "steps": [
-                        {"tool": "nl_to_sql"},
+                        {"tool": "llm_nl_to_sql"},
                         {"tool": "sql_exec"},
                         {"tool": "answer_format"}
                     ]
@@ -104,7 +104,7 @@ async def test_mcp_partial_steps():
     # Enable MCP for testing
     with patch('sql_assistant.main.ENABLE_MCP', True):
         # Mock individual pipeline functions and LLM providers
-        with patch('sql_assistant.main.nl_to_sql') as mock_nl_to_sql, \
+        with patch('sql_assistant.main.llm_nl_to_sql') as mock_llm_nl_to_sql, \
              patch('sql_assistant.main.sql_exec') as mock_sql_exec, \
              patch('sql_assistant.main.answer_format') as mock_answer_format, \
              patch('sql_assistant.services.pipeline.check_llm_api_keys') as mock_check_keys:
@@ -113,20 +113,20 @@ async def test_mcp_partial_steps():
             mock_check_keys.return_value = ("dummy_key", None, None)
             
             # Set up mock return values
-            mock_nl_to_sql.return_value = {"sql": "SELECT * FROM test"}
+            mock_llm_nl_to_sql.return_value = {"sql": "SELECT * FROM test"}
             mock_sql_exec.return_value = {"rows": [{"count": 5}]}
             mock_answer_format.return_value = "Test answer"
             
-            # Need to verify that nl_to_sql is called with the semantic_mappings parameter
-            mock_nl_to_sql.assert_not_called()  # Reset any previous calls
+            # Need to verify that llm_nl_to_sql is called with the semantic_mappings parameter
+            mock_llm_nl_to_sql.assert_not_called()  # Reset any previous calls
             
-            # Test with only nl_to_sql step
+            # Test with only llm_nl_to_sql step
             response1 = client.post(
                 "/mcp",
                 json={
                     "trace_id": str(uuid.uuid4()),
                     "context": {"query": "How many vehicles do we have?"},
-                    "steps": [{"tool": "nl_to_sql"}]
+                    "steps": [{"tool": "llm_nl_to_sql"}]
                 },
                 headers={"Authorization": f"Bearer {MOCK_TOKEN}"}
             )
@@ -134,7 +134,7 @@ async def test_mcp_partial_steps():
             # Should be successful
             assert response1.status_code == 200
             
-            # Should have output for nl_to_sql step
+            # Should have output for llm_nl_to_sql step
             assert response1.json()["steps"][0]["output"] == {"sql": "SELECT * FROM test"}
             
             # Test with multiple steps
@@ -144,7 +144,7 @@ async def test_mcp_partial_steps():
                     "trace_id": str(uuid.uuid4()),
                     "context": {"query": "How many vehicles do we have?"},
                     "steps": [
-                        {"tool": "nl_to_sql"},
+                        {"tool": "llm_nl_to_sql"},
                         {"tool": "sql_exec"},
                         {"tool": "answer_format"}
                     ]
@@ -170,7 +170,7 @@ async def test_mcp_disabled():
             json={
                 "trace_id": str(uuid.uuid4()),
                 "context": {"query": "How many vehicles do we have?"},
-                "steps": [{"tool": "nl_to_sql"}]
+                "steps": [{"tool": "llm_nl_to_sql"}]
             },
             headers={"Authorization": f"Bearer {MOCK_TOKEN}"}
         )

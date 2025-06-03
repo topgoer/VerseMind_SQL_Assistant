@@ -100,41 +100,9 @@ year: trips.start_ts
 __hints__:
   table_aliases:
     battery_cycles: bc
-    trips: t
     vehicles: v
-  column_aliases:
-    start_time: trips.start_ts
-    end_time: trips.end_ts
   trend_queries:
   - term: battery health trend
     column: battery_cycles.soh_pct
     time_column: battery_cycles.ts
     alias: bc
-    grouping:
-    - week
-    - day
-    - none
-  - term: soh trend
-    column: battery_cycles.soh_pct
-    time_column: battery_cycles.ts
-    alias: bc
-    grouping:
-    - week
-    - day
-    - none
-  fallback_rules:
-  - if_error: missing_column
-    match: start_time
-    suggestion: Did you mean 'start_ts'?
-    replace_with: start_ts
-  - if_error: missing_column
-    match: end_time
-    suggestion: Did you mean 'end_ts'?
-    replace_with: end_ts
-  - if_error: invalid_alias
-    match: veu
-    suggestion: No alias 'veu' is defined. Did you mean 'bc' for battery_cycles?
-    replace_with: bc
-  - if_error: table_not_found
-    match: vehicle_energy_usage
-    suggestion: This table does not exist. Try using 'trips' or 'battery_cycles' instead.
