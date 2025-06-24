@@ -20,15 +20,19 @@ jobs:
            
        - name: Set CLI Config
          run: jf npm-config --global=true --repo-resolve=versemind-npm --repo-deploy=versemind-npm
+         working-directory: frontend
            
        - name: Install Deps
          run: jf npm install
+         working-directory: frontend
            
        - name: Run tests
          run: npm test
+         working-directory: frontend
          
        - name: Publish
          run: jf npm publish
+         working-directory: frontend
          
        - name: Publish Build info With JFrog CLI
          run: |
@@ -38,3 +42,4 @@ jobs:
           jf rt build-add-git
           # Publish build info
           jf rt build-publish
+         working-directory: frontend
